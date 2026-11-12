@@ -79,7 +79,7 @@ export function registerGovernanceTeam({routes,main,el,api,state,toast}) {
     }
     const rows=data.members.map(m=>el("tr",{},el("td",{},el("strong",{},m.email),m.sub===data.actor?el("p",{},"You"):""),
       el("td",{},m.role_labels.join(", ")),el("td",{},accessText(m.app_access,m.roles)),el("td",{},el("span",{class:"gov-pill gov-green"},"Active")),
-      el("td",{},el("div",{class:"gov-actions"},button("Change access",()=>changeRole(m)),m.sub!==data.actor?button("Revoke",()=>revoke(m)):"",data.local_preview&&m.sub!==data.actor?button("Preview as",()=>previewAs(m)):""))));
+      el("td",{},m.staff?el("span",{class:"cp-form-note"},"Managed by CloudSeals"):el("div",{class:"gov-actions"},button("Change access",()=>changeRole(m)),m.sub!==data.actor?button("Revoke",()=>revoke(m)):"",data.local_preview&&m.sub!==data.actor?button("Preview as",()=>previewAs(m)):""))));
     const pending=data.pending.map(p=>el("tr",{},el("td",{},p.email),el("td",{},p.role_labels.join(", ")),el("td",{},accessText(p.app_access,p.roles)),el("td",{},p.roles.includes("customer_app_user")?"Ready: signs in to the application":"Pending first sign-in"),
       el("td",{},el("div",{class:"gov-actions"},button("Change access",()=>changePending(p)),data.local_preview?button("Activate local preview",async()=>{await api(base+"/preview-activate",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Local preview membership activated with the registered role");await reload();}):"User signs in with verified work email",button("Cancel registration",async()=>{await api(base+"/pending/cancel",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Pending registration cancelled");await reload();})))));
     const root=el("div",{class:"gov"},

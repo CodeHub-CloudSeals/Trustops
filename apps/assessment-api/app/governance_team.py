@@ -86,7 +86,12 @@ def make_team_router(principal, store, persist=None, list_apps=None):
     def listing(p=Depends(principal)):
         admin(p)
         with store.lock:
-            return {"members": [public(sub, u) for sub, u in store.users.items() if u.get("tenant_id") == p.tenant_id],
+            members = [public(sub, u) for sub, u in store.users.items() if u.get("tenant_id") == p.tenant_id]
+            if p.tenant_id == os.environ.get("TRUSTOPS_ORG_TENANT", "t-cloudseals"):
+                # CloudSeals administrators act as this workspace's administrators; their platform role is managed elsewhere.
+                members += [{**public(sub, u), "roles": ["customer_admin"], "role_labels": ["Admin (CloudSeals administrator)"], "staff": True}
+                            for sub, u in store.users.items() if u.get("tenant_id") is None and "cloudseals_admin" in u.get("roles", [])]
+            return {"members": members,
                     "applications": [{"id": a["id"], "name": a["name"]} for a in (list_apps(p.tenant_id) if list_apps else [])],
                     "app_roles": [{"id": "preparer", "label": "Preparer"}, {"id": "reviewer", "label": "Reviewer"}],
                     "pending": [{"email": email, "roles": u["roles"], "app_access": u.get("app_access", {}), "role_labels": [ROLE_LABELS.get(r, r) for r in u["roles"]],
