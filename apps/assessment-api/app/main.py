@@ -193,17 +193,53 @@ def principal(ident: dict = Depends(authenticated_identity)) -> Principal:
     return Principal(sub=sub, tenant_id=user.get("tenant_id"), roles=user["roles"])
 
 
+ORG_TENANT = os.environ.get("TRUSTOPS_ORG_TENANT", "t-cloudseals")
+ORG_NAME = os.environ.get("TRUSTOPS_ORG_NAME", "CloudSeals")
+
+
+def console_principal(p: Principal = Depends(principal)) -> Principal:
+    """Governance console identity. CloudSeals administrators without a customer workspace work in the
+    CloudSeals organisation workspace as its administrators; everyone else keeps their own workspace."""
+    if p.tenant_id is None and "cloudseals_admin" in p.roles:
+        if ORG_TENANT not in STORE.tenants:
+            STORE.tenants[ORG_TENANT] = {"tenant_id": ORG_TENANT, "name": ORG_NAME}
+        return Principal(sub=p.sub, tenant_id=ORG_TENANT, roles=sorted(set(p.roles) | {"customer_admin"}))
+    return p
+
+
 def audit(p: Principal, action: str, ref: str) -> None:
     STORE.audit.append({"at": time.time(), "sub": p.sub, "tenant_id": p.tenant_id, "action": action, "ref": ref})
 
 
 app.include_router(_ledgersight_router(principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub))
-_INTEGRATIONS = _integrations_router(principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE)
+_INTEGRATIONS = _integrations_router(console_principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE)
 app.include_router(_INTEGRATIONS)
-app.include_router(_decisions_router(principal, _INTEGRATIONS.store.find_by_key, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE,
+app.include_router(_decisions_router(console_principal, _INTEGRATIONS.store.find_by_key, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE,
                                     tenant_name=lambda t: (STORE.tenants.get(t) or {}).get("name") or t,
                                     integrations=_INTEGRATIONS.store))
-app.include_router(make_team_router(principal, STORE, lambda: persist.save(STORE) if persist.enabled() else None))
+app.include_router(make_team_router(console_principal, STORE, lambda: persist.save(STORE) if persist.enabled() else None,
+                                   list_apps=lambda t: _INTEGRATIONS.store.list(t) if t else []))
+
+
+@app.get("/v1/app-access")
+def app_access(email: str = Query(..., max_length=200), x_trustops_key: Optional[str] = Header(default=None)):
+    """For a connected application: what access does this person have in it? Managed in TrustOps Team & access."""
+    found = _INTEGRATIONS.store.find_by_key(x_trustops_key or "")
+    if not found:
+        raise err(401, "invalid_key", "A valid X-TrustOps-Key is required")
+    tenant, integ = found
+    email = email.strip().lower()
+    with STORE.lock:
+        rec = next((u for u in STORE.users.values() if u.get("tenant_id") == tenant and (u.get("email") or "").lower() == email), None)
+        if rec is None:
+            pend = STORE.pending_users.get(email)
+            rec = pend if pend and pend.get("tenant_id") == tenant else None
+    explicit = (rec or {}).get("app_access", {}).get(integ["id"])
+    roles = set((rec or {}).get("roles", []))
+    # Application access follows the TrustOps role: admins and approvers review, preparers prepare, viewers have none.
+    derived = ("reviewer" if roles & {"customer_admin", "customer_controller"} else
+               "preparer" if "customer_app_user" in roles else None)
+    return {"email": email, "application": integ["name"], "role": explicit or derived}
 
 
 def publish_event(ev: dict) -> None:
@@ -1683,8 +1719,8 @@ def _invite(tenant_id: str, role: str, by: str) -> str:
 
 @app.get("/v1/me")
 def me(p: Principal = Depends(principal)):
-    return {"sub": p.sub, "tenant_id": p.tenant_id, "roles": p.roles, "is_staff": p.is_staff,
-            "tenant": STORE.tenants.get(p.tenant_id or "")}
+    return {"sub": p.sub, "email": (STORE.users.get(p.sub) or {}).get("email"), "tenant_id": p.tenant_id, "roles": p.roles,
+            "is_staff": p.is_staff, "tenant": STORE.tenants.get(p.tenant_id or "")}
 
 
 @app.post("/v1/invitations/accept")

@@ -5,3 +5,7 @@ infra
 *.docx
 *.xlsx
 __pycache__
+.trustops-data
+.pytest_cache
+.mypy_cache
+.ruff_cache

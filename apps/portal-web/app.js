@@ -1,6 +1,6 @@
 import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-12n";
-import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13b";
-import { registerApplications } from "./applications.js?v=live-governance-2026-11-12";
+import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13i";
+import { registerApplications } from "./applications.js?v=access-2026-11-13b";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);
 const main = $("#main"), nav = $("#nav"), who = $("#who"), contextBar = $("#contextBar");
@@ -110,25 +110,26 @@ async function loginView() {
       return;
     }
   }
-  const card = el("section", { class: "login-card" },
-    el("div", { class: "login-mark", "aria-hidden": "true" }, "C"),
-    el("span", { class: "login-eyebrow" }, "CLOUDSEALS · TRUSTOPS"),
-    el("h2", {}, "Sign in to your workspace"),
-    el("p", { class: "login-copy" }, "Use your organisation account to securely access your TrustOps workspace."));
+  document.body.classList.add("login-page");
+  const point = (t) => el("li", {}, t);
+  const visual = el("section", { class: "lg-visual lg-hero" },
+    el("img", { src: "images/login-hero.jpg", alt: "Every AI action, governed: AI proposes, TrustOps checks policy, authority and limits, then allows, sends to human review or denies, and records the evidence." }));
+  const card = el("section", { class: "lg-card" },
+    el("img", { src: "images/logo.svg", alt: "", class: "lg-logo" }),
+    el("span", { class: "lg-eyebrow dark" }, "TrustOps"),
+    el("h1", {}, "Sign in"),
+    el("p", { class: "lg-sub" }, "Use your organisation account."));
   if (state.cfg.mode === "oidc") {
     const o = state.cfg.oidc;
     const ready = [o.authorize_url, o.token_url, o.client_id, o.redirect_uri].every(Boolean);
-    card.append(el("button", { class: "login-action", disabled: !ready, onclick: safe(oidcLogin) },
-      o.provider === "google" ? "Sign in with Google" : "Continue with organisation sign-in", el("span", { "aria-hidden": "true" }, "→")),
-      ready ? "" : el("p", { class: "login-notice" }, "Secure sign-in is not configured yet. Contact your CloudSeals administrator."));
+    card.append(el("button", { class: "lg-btn", disabled: !ready, onclick: safe(oidcLogin) },
+      o.provider === "google" ? "Sign in with Google" : "Continue with organisation sign-in"),
+      ready ? "" : el("p", { class: "lg-note" }, "Sign-in is not configured yet. Contact your CloudSeals administrator."));
   } else {
-    card.append(el("div", { class: "login-notice" },
-      el("strong", {}, "Local workspace is unavailable"),
-      el("span", {}, "The local development workspace could not be loaded. Check the API and seed data.")));
+    card.append(el("p", { class: "lg-note" }, "The local workspace could not be loaded. Check the API and seed data."));
   }
-  card.append(el("p", { class: "login-footnote" }, "Protected access · Your organisation manages users and permissions"));
-  if (state.cfg.mode === "oidc") card.append(el("a", { class: "register-link", href: "#/register" }, "Request workspace access →"));
-  main.replaceChildren(card);
+  const foot = el("p", { class: "lg-foot" }, "Invitation-only access · Your organisation manages users and roles");
+  main.replaceChildren(el("div", { class: "lg-wrap" }, visual, el("div", { class: "lg-side" }, card, foot)));
 }
 
 // ---------- routing ----------
@@ -164,7 +165,7 @@ async function render() {
     return loginView();
   }
   if (!state.me) { try { state.me = await api("/v1/me"); } catch { return logout(); } }
-  document.body.classList.add("workspace-ready");
+  document.body.classList.add("workspace-ready"); document.body.classList.remove("login-page");
   const staff = state.me.is_staff;
   const roles = state.me.roles;
   const hasAnyRole = (...allowed) => roles.some((role) => allowed.includes(role));
@@ -198,14 +199,11 @@ async function render() {
     link(["governance-reports", "Reports"]),
     el("span", { class: "nav-section-label" }, "Admin"),
     link(["connected-systems", "Applications"]),
-    hasAnyRole("customer_admin") ? link(["governance-team", "Team & access"]) : "",
-    staff ? el("span", { class: "nav-section-label" }, "CloudSeals") : "",
-    canUseCases ? link(["cases", "Cases"]) : "",
-    hasAnyRole("cloudseals_admin", "cloudseals_platform_ops", "cloudseals_reviewer", "cloudseals_assessor") ? link(["queue", "Review queue"]) : "",
-    staff ? group("Administration", adminItems) : "");
+    hasAnyRole("customer_admin", "cloudseals_admin") ? link(["governance-team", "Team & access"]) : "",
+    "");   // CloudSeals staff pages (cases, review queue, administration) stay reachable by URL only
   who.replaceChildren(state.cfg.mode === "dev"
     ? el("span", { class: "tag" }, state.me.tenant ? `${tenantLabel(state.me.tenant)} workspace` : "CloudSeals staff")
-    : `${state.me.sub} `, state.cfg.mode === "dev" ? "" : el("button", { class: "secondary", onclick: logout }, "Sign out"));
+    : el("span", { class: "who-email" }, state.me.email || state.me.sub), state.cfg.mode === "dev" ? "" : el("button", { class: "secondary", onclick: logout }, "Sign out"));
   contextBar.replaceChildren(
     el("div", { class: "workspace-breadcrumb" }, el("span", {}, "Workspace"), el("span", { "aria-hidden": "true" }, "/"), el("strong", {}, ({dashboard:"Overview",assessments:"Assessments",assessment:"Assessment", "agent-flow":"Assessment process",trustops:"Overview",agents:"Assessment team",reports:"Reports",demo:"Demo Studio", "ledger-sight":"LedgerSight POC"})[name] || name.replaceAll("-", " "))),
     el("div", { class: "workspace-context-actions" }, state.cfg.mode !== "dev" ? el("span", { class: "workspace-session" }, "Secure session") : "", el("span", { class: "workspace-avatar", "aria-hidden": "true" }, tenantLabel(state.me.tenant).slice(0,1))));

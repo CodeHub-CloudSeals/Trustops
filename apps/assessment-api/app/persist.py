@@ -69,10 +69,21 @@ def _dec(name: str, v: Any) -> Any:
     return {tuple(k): val for k, val in v} if name in TUPLE_KEYED else v
 
 
+def _dump(store: Store) -> str:
+    """Snapshot body. Fields written by another TrustOps version are carried through unchanged, never dropped."""
+    with store.lock:
+        body = dict(getattr(store, "_unknown_state", {}))
+        body.update({f: _enc(f, getattr(store, f)) for f in FIELDS})
+        return json.dumps(body, default=str)
+
+
 def _apply(store: Store, body: str) -> None:
     data = json.loads(body)
     with store.lock:
+        store._unknown_state = {f: v for f, v in data.items() if f not in FIELDS}
         for f, v in data.items():
+            if f not in FIELDS:
+                continue
             cur = getattr(store, f)
             cur.clear()
             dec = _dec(f, v)
@@ -117,7 +128,7 @@ def _gcs_save(store: Store, target: str) -> None:
     from google.api_core.exceptions import PreconditionFailed
     bucket, name = _gcs_parts(target)
     with store.lock:
-        blob_text = json.dumps({f: _enc(f, getattr(store, f)) for f in FIELDS}, default=str)
+        blob_text = _dump(store)
     blob = bucket.blob(name)
     try:
         blob.upload_from_string(blob_text, content_type="application/json", if_generation_match=_versions.get(target, 0))
@@ -164,7 +175,7 @@ def _save(store: Store, target: Optional[str | URL] = None) -> None:
         return _gcs_save(store, str(target))
     eng, key = _engine(target), str(target)
     with store.lock:
-        blob = json.dumps({f: _enc(f, getattr(store, f)) for f in FIELDS}, default=str)
+        blob = _dump(store)
     expected = _versions.get(key, 0)
     with eng.begin() as c:
         if expected == 0:

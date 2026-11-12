@@ -74,11 +74,11 @@ def test_sign_in_screen_renders_and_starts_google_sign_in(page):
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.goto(URL + "/")
-    expect(page.get_by_role("heading", name="Sign in to your workspace")).to_be_visible()
-    expect(page.locator("body")).to_have_css("background-color", "rgb(246, 248, 252)")
+    expect(page.get_by_role("heading", name="Sign in", exact=True)).to_be_visible()
+    expect(page.locator("body")).to_have_css("background-color", "rgb(250, 251, 253)")
     button = page.get_by_role("button", name=re.compile("Sign in with Google"))
     expect(button).to_be_enabled()
-    expect(page.get_by_role("link", name=re.compile("Request workspace access"))).to_be_visible()
+    expect(page.get_by_role("link", name=re.compile("Request access"))).to_have_count(0)
     with page.expect_navigation(url=re.compile(r"^https://accounts\.google\.com/")) as nav:
         button.click()
     assert "code_challenge_method=S256" in nav.value.url and "redirect_uri=" in nav.value.url and errors == []

@@ -39,6 +39,13 @@ class TeamTests(unittest.TestCase):
         self.assertEqual(self.c.get(self.base).status_code,403)
         self.assertEqual(self.c.post(self.base+"/invites",json={"email":"new@example.test","role":"admin"}).status_code,403)
 
+    def test_offered_roles_are_admin_approver_viewer(self):
+        opts=[o["id"] for o in self.c.get(self.base).json()["role_options"]]
+        self.assertEqual(opts,["admin","approver","viewer","none"])
+        r=self.c.post(self.base+"/invites",json={"email":"approver@example.test","role":"approver"})
+        self.assertEqual(r.status_code,201)
+        self.assertEqual(self.store.pending_users["approver@example.test"]["roles"],["customer_controller"])
+
     def test_registration_and_preview_activation_preserve_registered_role(self):
         r=self.c.post(self.base+"/invites",json={"email":"new@example.test","role":"reviewer"})
         self.assertEqual(r.status_code,201)

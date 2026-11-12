@@ -280,3 +280,58 @@ def test_name_only_application_and_address_later(env, monkeypatch):
     upd = c.patch(f"/v1/integrations/{app['id']}", headers=h("admin@t-bank"), json={"base_url": "https://ls.example.com"}).json()
     assert upd["base_url"] == "https://ls.example.com" and upd["status"] == "untested"
     assert c.patch(f"/v1/integrations/{app['id']}", headers=h("controller@t-bank"), json={"base_url": ""}).status_code == 403
+
+
+def test_state_from_another_version_loads_and_keeps_unknown_fields():
+    import json as _j
+    from app import persist
+    from app.store import Store
+    s = Store()
+    persist._apply(s, _j.dumps({"users": {"u": {"tenant_id": "t"}}, "pocs": {"p1": {"x": 1}}}))
+    assert s.users == {"u": {"tenant_id": "t"}}
+    out = _j.loads(persist._dump(s))
+    assert out["pocs"] == {"p1": {"x": 1}} and "decisions" in out
+
+
+def test_cloudseals_admins_work_in_the_cloudseals_workspace(env, public_dns):
+    c, h = env
+    app = c.post("/v1/integrations", headers=h("architect@cloudseals"), json={"name": "LedgerSight"})
+    assert app.status_code == 200
+    assert STORE.integrations[app.json()["id"]]["tenant"] == "t-cloudseals"
+    assert c.get("/v1/integrations", headers=h("admin@t-bank")).json()["items"] == []        # customers do not see it
+    assert c.get("/v1/integrations", headers=h("reviewer@cloudseals")).status_code == 403    # not a CloudSeals admin
+    assert STORE.tenants["t-cloudseals"]["name"] == "CloudSeals"
+
+
+def test_application_access_is_managed_in_trustops(env, public_dns):
+    c, h = env
+    app = register(c, h)
+    key = app["trustops_key"]
+    base = "/v1/governance/team"
+    r = c.post(base + "/invites", headers=h("admin@t-bank"), json={"email": "Prep@Firm.test", "role": "none", "app_access": {app["id"]: "preparer"}})
+    assert r.status_code == 201, r.text
+    got = c.get("/v1/app-access", params={"email": "prep@firm.test"}, headers={"X-TrustOps-Key": key}).json()
+    assert got["role"] == "preparer" and got["application"] == "Recon app"
+    assert c.get("/v1/app-access", params={"email": "nobody@firm.test"}, headers={"X-TrustOps-Key": key}).json()["role"] is None
+    assert c.get("/v1/app-access", params={"email": "prep@firm.test"}, headers={"X-TrustOps-Key": "tok_bad"}).status_code == 401
+    other = register(c, h, "admin@t-health", "Other")["trustops_key"]
+    assert c.get("/v1/app-access", params={"email": "prep@firm.test"}, headers={"X-TrustOps-Key": other}).json()["role"] is None
+    # change to reviewer, then remove
+    assert c.put(base + "/pending/prep@firm.test/access", headers=h("admin@t-bank"), json={"app_access": {app["id"]: "reviewer"}}).status_code == 200
+    assert c.get("/v1/app-access", params={"email": "prep@firm.test"}, headers={"X-TrustOps-Key": key}).json()["role"] == "reviewer"
+    c.put(base + "/pending/prep@firm.test/access", headers=h("admin@t-bank"), json={"role": "viewer", "app_access": {}})
+    assert c.get("/v1/app-access", params={"email": "prep@firm.test"}, headers={"X-TrustOps-Key": key}).json()["role"] is None
+    assert c.post(base + "/invites", headers=h("admin@t-bank"), json={"email": "x@firm.test", "app_access": {"int_nope": "preparer"}}).status_code == 422
+    listing = c.get(base, headers=h("admin@t-bank")).json()
+    assert listing["applications"][0]["name"] == "Recon app" and "none" in [o["id"] for o in listing["role_options"]]
+
+
+
+def test_application_access_follows_the_trustops_role(env, public_dns):
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    base = "/v1/governance/team"
+    for email, role in (("p@firm.test", "none"), ("a@firm.test", "approver"), ("v@firm.test", "viewer")):
+        assert c.post(base + "/invites", headers=h("admin@t-bank"), json={"email": email, "role": role}).status_code == 201
+    look = lambda e: c.get("/v1/app-access", params={"email": e}, headers={"X-TrustOps-Key": key}).json()["role"]
+    assert look("p@firm.test") == "preparer" and look("a@firm.test") == "reviewer" and look("v@firm.test") is None

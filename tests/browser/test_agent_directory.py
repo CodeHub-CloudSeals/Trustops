@@ -33,7 +33,7 @@ def test_navigation_only_offers_case_management_to_case_roles(as_user, api):
         expect(page.get_by_role('heading', name='Assessment team', exact=True).first).to_be_visible()
         nav = page.locator('#nav')
         expect(nav.get_by_role('link', name='Cases', exact=True)).to_have_count(0)
-        expect(nav.get_by_role('link', name='Review queue', exact=True)).to_be_visible()
+        expect(nav.get_by_role('link', name='Review queue', exact=True)).to_have_count(0)   # staff pages are URL-only
     finally:
         api('architect@cloudseals', 'PATCH', '/v1/admin/users/reviewer@cloudseals', {'roles': ['cloudseals_reviewer']})
 

@@ -136,29 +136,15 @@ export function registerTrustBoundary({ routes, main, el, api }) {
       el("p", { class: "tb-sub" }, `Built-in sandbox: ${ops?.connector_status === "mock_only" ? "Mock SAP (synthetic, for demos only)" : "none"}.`)));
   };
 
-  const showKey = (app, test) => {
-    const origin = location.origin;
+  const showKey = (app) => {
+    const env = `TRUSTOPS_URL=${location.origin}\nTRUSTOPS_KEY=${app.trustops_key}`;
     main.replaceChildren(page(
-      head("APPLICATION INTEGRATION", `${app.name} added`, "Put these two settings in the application. It can then ask TrustOps before it acts."),
-      el("section", { class: "tb-card tb-step" }, el("h3", {}, "TrustOps key for this application"),
-        el("p", { class: "tb-sub" }, "Copy it now and put it in the application's settings as TRUSTOPS_KEY (with TRUSTOPS_URL). It will not be shown again."),
-        el("pre", { class: "tb-key" }, app.trustops_key),
-        el("pre", { class: "tb-key" }, `TRUSTOPS_URL=${location.origin}\nTRUSTOPS_KEY=${app.trustops_key}`),
-        el("div", { class: "gov-actions" }, el("button", { class: "gov-button gov-secondary", type: "button", onclick: (e) => { navigator.clipboard?.writeText(app.trustops_key); e.target.textContent = "Copied"; } }, "Copy key"))),
-      el("section", { class: "tb-card tb-step" }, el("h3", {}, "How the application asks TrustOps"),
-        el("p", { class: "tb-sub" }, "Before each consequential action, call this and only act on ALLOW. ESCALATE means wait for a person; DENY means do not act."),
-        el("pre", { class: "tb-key" }, `POST ${origin}/v1/decisions
-X-TrustOps-Key: <key>
-Content-Type: application/json
-
-{"actor": {"type": "agent", "id": "match-agent"},
- "action": "approve_match", "amount_minor": 1240000, "currency": "USD",
- "client": "client-a", "resource": "bank-line-123"}
-
-→ {"decision": "ESCALATE", "policy_id": "FIN-04", "reason": "...", "decision_id": "dec_…"}
-
-GET ${origin}/v1/decisions/<decision_id>/status   → APPROVED | REJECTED | PENDING`)),
-      el("a", { class: "gov-button", href: "#/connected-systems" }, "Done")));
+      head("ADMIN", `${app.name} added`, "Copy these two lines into the application's env. The key is shown only once."),
+      el("section", { class: "tb-card tb-step" },
+        el("pre", { class: "tb-key" }, env),
+        el("div", { class: "gov-actions" },
+          el("button", { class: "gov-button", type: "button", onclick: (e) => { navigator.clipboard?.writeText(env); e.target.textContent = "Copied"; } }, "Copy"),
+          el("a", { class: "gov-button gov-secondary", href: "#/connected-systems" }, "Done")))));
   };
 
   routes["add-application"] = async () => {

@@ -61,15 +61,13 @@ def test_customers_cannot_use_staff_pages(as_user, route):
     assert page.locator("main table tbody tr").count() == 0
 
 
-def test_staff_sees_staff_menus_and_customers_do_not(as_user):
-    staff = as_user("architect@cloudseals", "admin")
-    expect(staff.get_by_role("link", name="Cases", exact=True)).to_be_visible()
-    staff.locator("summary", has_text="Administration").click()
-    for name in ("Users", "Audit logs", "Service health", "Customer workspaces"):
-        expect(staff.get_by_role("link", name=name)).to_be_visible()
-    customer = as_user("admin@t-bank", "dashboard")
-    expect(customer.get_by_role("link", name="Cases", exact=True)).to_have_count(0)
-    expect(customer.locator("summary", has_text="Administration")).to_have_count(0)
+def test_staff_menus_are_hidden_but_staff_pages_stay_reachable(as_user):
+    staff = as_user("architect@cloudseals", "dashboard")
+    expect(staff.get_by_role("heading", name="Overview", exact=True)).to_be_visible()
+    expect(staff.locator("#nav").get_by_role("link", name="Cases", exact=True)).to_have_count(0)
+    expect(staff.locator("summary", has_text="Administration")).to_have_count(0)
+    users = as_user("architect@cloudseals", "users")
+    expect(users.locator("main")).not_to_contain_text(re.compile("do not have access", re.I))
 
 
 def test_sign_out_and_back(as_user):

@@ -1,4 +1,4 @@
-import { registerGovernanceTeam } from "./governance-team.js?v=policy-lifecycle-2026-11-12";
+import { registerGovernanceTeam } from "./governance-team.js?v=access-2026-11-13b";
 import { createDocumentReviews } from "./document-reviews.js?v=document-reviews-2026-11-12";
 // Live application governance. Credentials and client-scope mappings remain server-side.
 export function registerApplications({ routes, main, el, state, toast, api }) {
