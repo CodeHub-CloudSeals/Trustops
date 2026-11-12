@@ -231,6 +231,11 @@ def app_access(email: str = Query(..., max_length=200), x_trustops_key: Optional
     email = email.strip().lower()
     with STORE.lock:
         rec = next((u for u in STORE.users.values() if u.get("tenant_id") == tenant and (u.get("email") or "").lower() == email), None)
+        if rec is None and tenant == ORG_TENANT:
+            # CloudSeals administrators work in the CloudSeals workspace as its administrators (see console_principal).
+            staff = next((u for u in STORE.users.values() if u.get("tenant_id") is None and "cloudseals_admin" in u.get("roles", [])
+                          and (u.get("email") or "").lower() == email), None)
+            rec = {**staff, "roles": sorted(set(staff.get("roles", [])) | {"customer_admin"})} if staff else None
         if rec is None:
             pend = STORE.pending_users.get(email)
             rec = pend if pend and pend.get("tenant_id") == tenant else None
