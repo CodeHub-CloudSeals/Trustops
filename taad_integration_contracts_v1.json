@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "boundary": "TAAD Diagnosis Workstation -> existing TrustOps Core",
+  "identity": {
+    "identity_provider": "Cognito / federated OIDC-SAML",
+    "tenant_claim_source": "validated server-side membership; never trust arbitrary tenant header",
+    "roles": ["customer_admin", "customer_architect", "customer_risk", "customer_controller", "customer_contributor", "cloudseals_admin", "cloudseals_assessor", "cloudseals_reviewer", "cloudseals_platform_ops", "auditor_readonly"]
+  },
+  "protocol": {
+    "api": "REST HTTPS with OIDC JWT, private service-to-service identity for handoff",
+    "event_format": "versioned EventBridge envelope with event_id, tenant_id, trace_id, causation_id, schema_version, source, occurred_at, payload_ref, payload_digest",
+    "idempotency": "Idempotency-Key on state-changing POSTs, server-enforced uniqueness; no exactly-once transport assumption"
+  },
+  "runtime_pack": {
+    "workflow_id": "ledgersight.ar_cash",
+    "version": "0.1.0",
+    "manifest": "packs/workflows/ledgersight.ar_cash/0.1.0.json",
+    "agents": ["ledgersight.intake", "ledgersight.match", "ledgersight.reconciliation", "ledgersight.cash_allocation", "ledgersight.exception", "ledgersight.audit"],
+    "sandbox_connector": "mock_sap",
+    "production_status": "NOT_CONNECTED_TO_TRUSTOPS_CORE_OR_REAL_CONNECTORS"
+  },
+  "events": [
+    {"type":"taad.tenant.activated.v1","emitter":"taad.tenant","consumer":"trustops.tenant_registry","payload":{"tenant_id":"uuid","organisation_ref":"uuid","residency_profile":"UK","engagement_approval_ref":"uuid"}},
+    {"type":"taad.assessment.submitted.v1","emitter":"taad.assessment","consumer":"taad.diagnosis_orchestrator","payload":{"tenant_id":"uuid","assessment_id":"uuid","snapshot_id":"uuid","questionnaire_version":"1.0.0","answer_manifest_digest":"sha256"}},
+    {"type":"taad.diagnosis.draft_ready.v1","emitter":"taad.analysis","consumer":"taad.review_queue","payload":{"tenant_id":"uuid","assessment_id":"uuid","finding_set_id":"uuid","report_id":"uuid","report_status":"draft_internal"}},
+    {"type":"taad.diagnosis.report_published.v1","emitter":"taad.report","consumer":"trustops.evidence_index","payload":{"tenant_id":"uuid","assessment_id":"uuid","report_id":"uuid","report_version":"1.0","report_digest":"sha256","review_approval_id":"uuid","status":"approved_customer"}},
+    {"type":"taad.poc.blueprint_approved.v1","emitter":"taad.poc_handoff","consumer":"trustops.workflow_registry","payload":{"tenant_id":"uuid","assessment_id":"uuid","blueprint_id":"uuid","blueprint_version":"1.0","source_report_id":"uuid","requested_pack_id":"ledgersight.ar_cash","approval_refs":["uuid"],"target_state":"DRAFT_ONLY"}},
+    {"type":"trustops.workflow_pack.draft_created.v1","emitter":"trustops.workflow_registry","consumer":"taad.poc_handoff","payload":{"tenant_id":"uuid","blueprint_id":"uuid","workflow_pack_draft_id":"uuid","status":"DRAFT_REQUIRES_RUNTIME_APPROVAL"}}
+  ],
+  "poc_blueprint_required_fields": ["tenant_id", "assessment_id", "report_id", "finding_refs", "system_inventory_refs", "connector_drafts", "agent_manifests_draft", "policy_candidates_draft", "authority_matrix_draft", "approval_matrix_draft", "evidence_profile_draft", "shadow_roi_baseline_ref", "success_criteria", "customer_security_signoff", "cloudseals_architect_signoff"],
+  "guardrails": [
+    "A diagnostic finding may propose a control but cannot modify production policy or connector permissions.",
+    "POC blueprint delivery creates only draft registry objects; runtime activation requires independent operational approval.",
+    "A regulator/article candidate classification is not a final legal determination.",
+    "Historical reports pin question, control, rule, model, and regulatory-content versions.",
+    "Swaska is read-only to customer production systems and cannot issue action tokens or call execution gateway."
+  ]
+}

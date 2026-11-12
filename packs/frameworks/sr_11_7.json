@@ -1,0 +1,521 @@
+{
+ "framework": {
+  "id": "sr_11_7",
+  "name": "Federal Reserve SR 11-7 Model Risk Management",
+  "short_name": "SR 11-7",
+  "version": "SR 11-7 (2011) with AI/ML supplement (2021)",
+  "issued_date": "2011-04-04",
+  "ai_ml_supplement_date": "2021-03-09",
+  "issuing_body": "Federal Reserve Board (FRB) / OCC",
+  "jurisdiction": "United States — Banking and Financial Services",
+  "description": "Supervisory guidance establishing a comprehensive framework for model risk management in banking organisations. Requires robust model development and validation processes, independent model validation, sound governance and oversight, and ongoing monitoring. Applies to all models including AI/ML systems used in financial decisions, credit underwriting, fraud detection, market risk, and customer-facing applications.",
+  "risk_tiers": [
+   "all"
+  ],
+  "applicable_institutions": [
+   "Banks",
+   "Bank holding companies",
+   "Savings associations",
+   "Any SR 11-7 regulated entity"
+  ],
+  "three_pillars": [
+   "Model Development, Implementation, and Use",
+   "Model Validation",
+   "Governance, Policies, and Controls"
+  ]
+ },
+ "requirements": [
+  {
+   "id": "MRM_1",
+   "title": "MRM-1 — Model Inventory",
+   "text": "Banking organisations shall maintain a comprehensive inventory of all models in use. The inventory shall include model identification, purpose, business owner, technical owner, deployment status, tier/risk rating, validation status, and last validation date. AI/ML systems are explicitly included in scope.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Development, Implementation, and Use",
+   "controls": [
+    {
+     "id": "MRM_1.C1",
+     "description": "Maintain a complete and current model inventory covering all quantitative models and AI/ML systems",
+     "evidence_needed": [
+      "Model inventory register",
+      "Inventory maintenance procedure",
+      "Completeness attestation"
+     ]
+    },
+    {
+     "id": "MRM_1.C2",
+     "description": "Assign risk tiers to all models based on materiality, complexity, and potential impact",
+     "evidence_needed": [
+      "Model tiering methodology",
+      "Tiered model inventory"
+     ]
+    },
+    {
+     "id": "MRM_1.C3",
+     "description": "Track and report on validation status for each model in the inventory",
+     "evidence_needed": [
+      "Validation status report",
+      "Overdue validation exception records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_2",
+   "title": "MRM-2 — Model Development Documentation",
+   "text": "Model development shall be documented comprehensively, including: purpose and intended use; theoretical basis and methodology; data used; assumptions and limitations; performance assessment; and development testing results. Documentation for AI/ML models shall additionally cover training data, feature engineering, hyperparameter tuning, and model selection rationale.",
+   "scope": "All SR 11-7 regulated institutions — model developers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Development, Implementation, and Use",
+   "controls": [
+    {
+     "id": "MRM_2.C1",
+     "description": "Produce comprehensive technical documentation for each model covering methodology, data, assumptions, and limitations",
+     "evidence_needed": [
+      "Model technical documentation",
+      "Model card or equivalent"
+     ]
+    },
+    {
+     "id": "MRM_2.C2",
+     "description": "For AI/ML models, document training data sources, preprocessing, feature selection, and model architecture decisions",
+     "evidence_needed": [
+      "AI/ML model development documentation",
+      "Dataset documentation"
+     ]
+    },
+    {
+     "id": "MRM_2.C3",
+     "description": "Document model performance benchmarks and testing results from development",
+     "evidence_needed": [
+      "Development test results",
+      "Benchmark performance metrics",
+      "Acceptance criteria documentation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_3",
+   "title": "MRM-3 — Model Implementation Controls",
+   "text": "Model implementation shall be controlled and documented. Implementation testing shall verify the model produces the intended results in the production environment. Change management processes shall govern model updates and retraining. AI/ML model deployment pipelines shall include automated testing gates.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Development, Implementation, and Use",
+   "controls": [
+    {
+     "id": "MRM_3.C1",
+     "description": "Conduct implementation testing to verify model behaves as designed in the production environment",
+     "evidence_needed": [
+      "Implementation test plan",
+      "Implementation test results"
+     ]
+    },
+    {
+     "id": "MRM_3.C2",
+     "description": "Implement change management controls for model updates, retraining, and version changes",
+     "evidence_needed": [
+      "Model change management procedure",
+      "Change log",
+      "Approval records"
+     ]
+    },
+    {
+     "id": "MRM_3.C3",
+     "description": "Maintain version control for AI/ML models including training code, model artefacts, and configurations",
+     "evidence_needed": [
+      "Model version control records",
+      "Artefact registry"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_4",
+   "title": "MRM-4 — Appropriate Model Use",
+   "text": "Models shall be used only for their intended purposes and within their established limitations. Users of model outputs shall receive appropriate training and understand model constraints. Significant deviations from intended use shall trigger re-validation.",
+   "scope": "All SR 11-7 regulated institutions — model users and business owners",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Development, Implementation, and Use",
+   "controls": [
+    {
+     "id": "MRM_4.C1",
+     "description": "Document approved use cases and constraints for each model and communicate to users",
+     "evidence_needed": [
+      "Approved use documentation",
+      "User training records"
+     ]
+    },
+    {
+     "id": "MRM_4.C2",
+     "description": "Implement controls to detect and address use outside approved boundaries",
+     "evidence_needed": [
+      "Use monitoring procedures",
+      "Out-of-bounds detection evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_5",
+   "title": "MRM-5 — Challenger Models",
+   "text": "For material models, challenger models or benchmarking analyses shall be maintained to provide an independent performance reference. Challenger models are particularly important for AI/ML systems where model opacity makes direct validation more challenging.",
+   "scope": "Material models at SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Development, Implementation, and Use",
+   "controls": [
+    {
+     "id": "MRM_5.C1",
+     "description": "Maintain challenger models or benchmark analyses for material AI/ML models",
+     "evidence_needed": [
+      "Challenger model documentation",
+      "Comparative performance analysis"
+     ]
+    },
+    {
+     "id": "MRM_5.C2",
+     "description": "Review champion/challenger performance regularly and document results",
+     "evidence_needed": [
+      "Champion/challenger review records",
+      "Performance comparison reports"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_6",
+   "title": "MRM-6 — Independent Model Validation",
+   "text": "Model validation shall be conducted by personnel or a function independent from model development. Independence is essential — validators must be able to challenge model design and outputs without conflicts of interest. For AI/ML models, validation requires specialised expertise in machine learning, statistics, and the relevant business domain.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Validation",
+   "controls": [
+    {
+     "id": "MRM_6.C1",
+     "description": "Establish a model validation function structurally independent from model development",
+     "evidence_needed": [
+      "Organisational chart showing independence",
+      "Validation charter",
+      "Conflict of interest policy"
+     ]
+    },
+    {
+     "id": "MRM_6.C2",
+     "description": "Ensure validation personnel have appropriate AI/ML expertise for the models they validate",
+     "evidence_needed": [
+      "Validator qualifications/credentials",
+      "Training records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_7",
+   "title": "MRM-7 — Validation Scope and Depth",
+   "text": "Model validation shall include: conceptual soundness review; data quality and representativeness assessment; ongoing performance monitoring review; sensitivity analysis; benchmarking; and outcomes analysis. AI/ML validation additionally requires evaluation of: feature importance stability; model interpretability; distributional shift detection; and adversarial robustness.",
+   "scope": "All SR 11-7 regulated institutions — model validation function",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Validation",
+   "controls": [
+    {
+     "id": "MRM_7.C1",
+     "description": "Conduct validation covering conceptual soundness, data quality, performance, and sensitivity analysis",
+     "evidence_needed": [
+      "Validation report with all required sections",
+      "Validation test results"
+     ]
+    },
+    {
+     "id": "MRM_7.C2",
+     "description": "For AI/ML models, conduct extended validation covering interpretability, distributional shift, and adversarial robustness",
+     "evidence_needed": [
+      "AI/ML validation report",
+      "Model interpretability analysis",
+      "Robustness test results"
+     ]
+    },
+    {
+     "id": "MRM_7.C3",
+     "description": "Conduct outcomes analysis comparing model predictions to actual outcomes",
+     "evidence_needed": [
+      "Outcomes analysis report",
+      "Back-testing results"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_8",
+   "title": "MRM-8 — Validation Findings and Remediation",
+   "text": "Validation findings shall be documented, tracked, and remediated in a timely manner. Findings are classified by severity. Material findings must be escalated to senior management. Models with unresolved material findings shall operate under formal limitations with senior management approval.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Validation",
+   "controls": [
+    {
+     "id": "MRM_8.C1",
+     "description": "Maintain a validation findings tracker with classification, ownership, target dates, and status",
+     "evidence_needed": [
+      "Findings tracker",
+      "Remediation evidence",
+      "Overdue findings report"
+     ]
+    },
+    {
+     "id": "MRM_8.C2",
+     "description": "Formally approve continued use of models with unresolved material findings with documented compensating controls",
+     "evidence_needed": [
+      "Senior management approval for limited-use models",
+      "Compensating control documentation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_9",
+   "title": "MRM-9 — Validation Frequency",
+   "text": "Models shall be validated on a periodic basis consistent with their risk tier. High-tier models shall be validated at least annually; material events (regulatory changes, performance deterioration, significant data changes) shall trigger ad hoc re-validation. AI/ML models with frequent retraining require a validation protocol for each material update.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Model Validation",
+   "controls": [
+    {
+     "id": "MRM_9.C1",
+     "description": "Establish and adhere to risk-based validation frequency schedules",
+     "evidence_needed": [
+      "Validation schedule",
+      "Compliance with schedule evidence"
+     ]
+    },
+    {
+     "id": "MRM_9.C2",
+     "description": "Define triggers for event-driven re-validation and monitor for trigger events",
+     "evidence_needed": [
+      "Re-validation trigger policy",
+      "Trigger monitoring records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_10",
+   "title": "MRM-10 — Model Risk Management Policy",
+   "text": "A comprehensive model risk management policy shall be in place, approved by senior management or the board, and reviewed at least annually. The policy shall define the scope of models covered, risk tiering criteria, validation requirements, and governance structure.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_10.C1",
+     "description": "Maintain a board/senior management approved MRM policy reviewed annually",
+     "evidence_needed": [
+      "MRM policy",
+      "Board/senior management approval evidence",
+      "Annual review records"
+     ]
+    },
+    {
+     "id": "MRM_10.C2",
+     "description": "Ensure MRM policy explicitly addresses AI/ML models",
+     "evidence_needed": [
+      "AI/ML specific sections of MRM policy"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_11",
+   "title": "MRM-11 — Model Risk Governance",
+   "text": "Effective governance of model risk requires senior management and board oversight, clear ownership, and a model risk reporting process. A model risk committee or equivalent governance structure shall oversee model risk across the enterprise.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_11.C1",
+     "description": "Establish a model risk committee or equivalent body with board/senior management representation",
+     "evidence_needed": [
+      "Model risk committee charter",
+      "Meeting minutes",
+      "Terms of reference"
+     ]
+    },
+    {
+     "id": "MRM_11.C2",
+     "description": "Provide regular model risk reporting to senior management and the board",
+     "evidence_needed": [
+      "Model risk reports",
+      "Board reporting evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_12",
+   "title": "MRM-12 — Ongoing Model Performance Monitoring",
+   "text": "Models in production shall be subject to ongoing performance monitoring to detect deterioration, data drift, and changing conditions that may invalidate model assumptions. Monitoring results shall be reviewed regularly and trigger re-validation when thresholds are breached. AI/ML models require real-time or near-real-time monitoring due to dynamic data environments.",
+   "scope": "All SR 11-7 regulated institutions — model operations and validation",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_12.C1",
+     "description": "Implement ongoing monitoring for all production models covering performance, data drift, and concept drift",
+     "evidence_needed": [
+      "Monitoring framework documentation",
+      "Monitoring reports",
+      "Alert records"
+     ]
+    },
+    {
+     "id": "MRM_12.C2",
+     "description": "Define and enforce performance thresholds that trigger review or re-validation",
+     "evidence_needed": [
+      "Threshold definitions",
+      "Threshold breach records and responses"
+     ]
+    },
+    {
+     "id": "MRM_12.C3",
+     "description": "Conduct periodic population stability analysis and statistical performance reviews",
+     "evidence_needed": [
+      "PSI/CSI analysis reports",
+      "Statistical performance monitoring records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_13",
+   "title": "MRM-13 — Model Risk Reporting",
+   "text": "Model risk exposures, validation findings, and monitoring results shall be reported to senior management and, where material, to the board. Reports shall include aggregate model risk assessments, key metrics, and emerging risks including those from AI/ML deployment.",
+   "scope": "All SR 11-7 regulated institutions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_13.C1",
+     "description": "Produce regular model risk management reports for senior management covering key risk indicators",
+     "evidence_needed": [
+      "Model risk reports",
+      "KRI dashboards",
+      "Report distribution records"
+     ]
+    },
+    {
+     "id": "MRM_13.C2",
+     "description": "Report AI/ML specific risks including explainability limitations, bias incidents, and data quality issues",
+     "evidence_needed": [
+      "AI/ML risk section in model risk reports"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_14",
+   "title": "MRM-14 — Third-Party and Vendor Model Risk",
+   "text": "Models sourced from third-party vendors are subject to SR 11-7 requirements. The institution remains responsible for model risk regardless of source. Vendor model due diligence, validation requirements, and ongoing monitoring must be applied. AI models from foundation model providers require specific vendor risk assessment processes.",
+   "scope": "All SR 11-7 regulated institutions using third-party models",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_14.C1",
+     "description": "Conduct due diligence on all third-party models and AI vendors before deployment",
+     "evidence_needed": [
+      "Vendor due diligence assessment",
+      "Vendor risk rating"
+     ]
+    },
+    {
+     "id": "MRM_14.C2",
+     "description": "Include MRM requirements in vendor contracts and monitor vendor compliance",
+     "evidence_needed": [
+      "Vendor contracts with MRM clauses",
+      "Vendor monitoring records"
+     ]
+    },
+    {
+     "id": "MRM_14.C3",
+     "description": "Apply proportionate validation to vendor-provided AI models, supplementing vendor documentation",
+     "evidence_needed": [
+      "Vendor model validation plan",
+      "Validation evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MRM_15",
+   "title": "MRM-15 — AI/ML Model Explainability and Fairness",
+   "text": "AI/ML models used in credit, fraud, and other consequential decisions must meet explainability requirements sufficient to comply with consumer protection laws (ECOA, FCRA). Fair lending analysis shall be conducted for credit models. Model outputs used in adverse action decisions must generate compliant reason codes.",
+   "scope": "SR 11-7 regulated institutions using AI/ML in consumer-facing decisions",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "pillar": "Governance, Policies, and Controls",
+   "controls": [
+    {
+     "id": "MRM_15.C1",
+     "description": "Implement explainability solutions for all AI/ML models used in adverse action decisions",
+     "evidence_needed": [
+      "Explainability methodology",
+      "Adverse action reason code mapping",
+      "Sample explanations"
+     ]
+    },
+    {
+     "id": "MRM_15.C2",
+     "description": "Conduct fair lending/bias analysis for credit and consumer-decision models",
+     "evidence_needed": [
+      "Fair lending analysis reports",
+      "Disparate impact analysis",
+      "Remediation evidence"
+     ]
+    },
+    {
+     "id": "MRM_15.C3",
+     "description": "Document model limitations affecting explainability and implement compensating controls",
+     "evidence_needed": [
+      "Explainability limitations documentation",
+      "Compensating control evidence"
+     ]
+    }
+   ]
+  }
+ ],
+ "provenance": {
+  "source": "cs-trustops-studio/trustops-gap-analysis-agent frameworks/sr_11_7",
+  "imported": "2026-10-11",
+  "review_status": "PENDING_LEGAL_REVIEW",
+  "notice": "CloudSeals working interpretation for candidate gap analysis. Not legal advice and not a determination of regulatory applicability."
+ }
+}

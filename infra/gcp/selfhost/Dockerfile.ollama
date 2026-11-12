@@ -1,0 +1,11 @@
+# A local model is bundled at build time so cold starts never download customer-time weights.
+FROM ollama/ollama:0.40.6
+ARG MODEL=qwen3:4b
+ENV OLLAMA_MODELS=/opt/ollama-models OLLAMA_HOST=0.0.0.0:11434 OLLAMA_NO_CLOUD=1 \
+    OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_MAX_QUEUE=4
+RUN set -eu; ollama serve >/tmp/ollama-build.log 2>&1 & server_pid=$!; \
+    trap 'kill "$server_pid" || true' EXIT; \
+    ready=0; for attempt in $(seq 1 30); do if ollama list >/dev/null 2>&1; then ready=1; break; fi; sleep 1; done; \
+    test "$ready" = 1; ollama pull "$MODEL"; ollama show "$MODEL" >/dev/null; rm -f /tmp/ollama-build.log
+EXPOSE 11434
+CMD ["serve"]

@@ -1,0 +1,9 @@
+-r requirements.txt
+pytest
+httpx
+ruff
+mypy
+moto[s3,events,sqs]
+pyyaml
+playwright
+pytest-playwright

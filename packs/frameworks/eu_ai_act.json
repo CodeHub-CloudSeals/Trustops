@@ -1,0 +1,414 @@
+{
+ "framework": {
+  "id": "eu_ai_act",
+  "name": "EU Artificial Intelligence Act",
+  "short_name": "EU AI Act",
+  "version": "Regulation (EU) 2024/1689",
+  "effective_date": "2024-08-01",
+  "full_applicability_date": "2026-08-02",
+  "issuing_body": "European Parliament and Council of the EU",
+  "jurisdiction": "European Union",
+  "description": "The world's first comprehensive legal framework for AI, establishing a risk-based approach to regulating AI systems placed on the EU market or affecting persons in the EU. Imposes obligations on providers, deployers, importers, and distributors of AI systems, with requirements scaling with risk level.",
+  "risk_tiers": [
+   "prohibited",
+   "high_risk",
+   "limited_risk",
+   "minimal_risk"
+  ],
+  "enforcement_body": "National competent authorities + European AI Office",
+  "penalty_max": "EUR 35,000,000 or 7% of global annual turnover"
+ },
+ "requirements": [
+  {
+   "id": "Article_5",
+   "title": "Prohibited AI Practices",
+   "text": "The following AI practices are prohibited: (a) AI systems that deploy subliminal techniques beyond a person's consciousness to materially distort behaviour causing harm; (b) AI systems that exploit vulnerabilities of specific groups; (c) AI systems for social scoring by public authorities; (d) real-time remote biometric identification systems in publicly accessible spaces by law enforcement (except in listed exceptional circumstances); (e) AI systems for emotion recognition in workplaces and educational institutions; (f) biometric categorisation systems inferring sensitive attributes; (g) AI systems creating facial recognition databases by untargeted scraping.",
+   "scope": "All AI systems placed on the EU market or used in the EU",
+   "risk_tiers_applicable": [
+    "prohibited",
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_5.C1",
+     "description": "Maintain an inventory of all AI systems classified against Article 5 prohibitions",
+     "evidence_needed": [
+      "AI use case register with prohibition screening",
+      "Legal counsel sign-off on prohibited practices assessment"
+     ]
+    },
+    {
+     "id": "Article_5.C2",
+     "description": "Establish a prohibition screening process in the AI procurement and development lifecycle",
+     "evidence_needed": [
+      "Prohibition screening checklist",
+      "Procurement governance records"
+     ]
+    },
+    {
+     "id": "Article_5.C3",
+     "description": "Document exceptions claimed under Article 5(2)-(6) for biometric identification",
+     "evidence_needed": [
+      "Exception justification documents",
+      "Supervisory authority authorisation (where required)"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_6",
+   "title": "Classification Rules for High-Risk AI Systems",
+   "text": "An AI system shall be considered high-risk if it: (a) is a safety component of a product covered by Union harmonisation legislation in Annex I and is subject to third-party conformity assessment; or (b) falls within the categories in Annex III. Providers must register high-risk AI systems in the EU database before placing on market.",
+   "scope": "All AI system providers and deployers",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_6.C1",
+     "description": "Conduct and document classification analysis for each AI system against Annex I and Annex III criteria",
+     "evidence_needed": [
+      "Classification assessment records",
+      "Legal review sign-off"
+     ]
+    },
+    {
+     "id": "Article_6.C2",
+     "description": "Register high-risk AI systems in the EU AI database prior to market placement",
+     "evidence_needed": [
+      "EU AI database registration confirmation",
+      "Registration maintenance log"
+     ]
+    },
+    {
+     "id": "Article_6.C3",
+     "description": "Monitor for changes to Annex III delegated acts that may reclassify existing systems",
+     "evidence_needed": [
+      "Regulatory change monitoring procedure",
+      "Reclassification review records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_9",
+   "title": "Risk Management System",
+   "text": "A risk management system shall be established, implemented, documented, and maintained for high-risk AI systems throughout the lifecycle. It shall consist of a continuous iterative process including: identification and analysis of reasonably foreseeable risks; estimation and evaluation of risks; evaluation of risks after testing; adoption of suitable risk management measures. Residual risk must be judged acceptable.",
+   "scope": "High-risk AI system providers",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_9.C1",
+     "description": "Implement a documented risk management process covering identification, analysis, evaluation, and treatment of AI risks",
+     "evidence_needed": [
+      "Risk management procedure",
+      "Risk register with AI-specific risks"
+     ]
+    },
+    {
+     "id": "Article_9.C2",
+     "description": "Conduct risk analysis covering the intended purpose and reasonably foreseeable misuse",
+     "evidence_needed": [
+      "Risk assessment documents",
+      "Misuse scenario analysis"
+     ]
+    },
+    {
+     "id": "Article_9.C3",
+     "description": "Test the AI system against defined risk scenarios prior to deployment",
+     "evidence_needed": [
+      "Test plan",
+      "Test results",
+      "Risk acceptance decision"
+     ]
+    },
+    {
+     "id": "Article_9.C4",
+     "description": "Document residual risks and obtain acceptance from senior stakeholders",
+     "evidence_needed": [
+      "Residual risk register",
+      "Risk acceptance sign-off records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_10",
+   "title": "Data and Data Governance",
+   "text": "High-risk AI systems that use training, validation, and testing data sets shall comply with data governance and management practices, including: design choices; data collection processes; examination for biases; identification of relevant data gaps or shortcomings; and appropriate measures to address them. Training, validation, and testing data sets shall be relevant, representative, free of errors, and complete.",
+   "scope": "High-risk AI system providers using trained models",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_10.C1",
+     "description": "Document data governance practices covering collection, labelling, preprocessing, and versioning of training/validation/test datasets",
+     "evidence_needed": [
+      "Data governance policy",
+      "Dataset documentation / datasheets"
+     ]
+    },
+    {
+     "id": "Article_10.C2",
+     "description": "Conduct and document bias analysis on training and test datasets with documented remediation",
+     "evidence_needed": [
+      "Bias assessment reports",
+      "Bias remediation records"
+     ]
+    },
+    {
+     "id": "Article_10.C3",
+     "description": "Maintain records of dataset provenance, version, and statistical characteristics",
+     "evidence_needed": [
+      "Dataset provenance records",
+      "Statistical summaries"
+     ]
+    },
+    {
+     "id": "Article_10.C4",
+     "description": "Implement data quality controls to ensure data is relevant, representative, and free of errors",
+     "evidence_needed": [
+      "Data quality procedures",
+      "Data quality audit results"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_12",
+   "title": "Record-Keeping and Logging",
+   "text": "High-risk AI systems shall be designed and developed with capabilities enabling the automatic recording of events (logs) throughout the system's lifetime. Logging capabilities shall ensure traceability of the AI system's functioning throughout the lifecycle, enable monitoring of the operation of the high-risk AI system, and support post-market monitoring.",
+   "scope": "High-risk AI system providers",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_12.C1",
+     "description": "Implement automated logging of AI system inputs, outputs, and decision events with tamper-evident storage",
+     "evidence_needed": [
+      "Logging architecture documentation",
+      "Log storage configuration"
+     ]
+    },
+    {
+     "id": "Article_12.C2",
+     "description": "Define and enforce log retention periods appropriate to the risk level and jurisdiction",
+     "evidence_needed": [
+      "Log retention policy",
+      "Retention enforcement evidence"
+     ]
+    },
+    {
+     "id": "Article_12.C3",
+     "description": "Enable reconstruction of any individual AI decision from logs for audit or regulatory review",
+     "evidence_needed": [
+      "Decision audit trail sample",
+      "Reconstruction procedure"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_13",
+   "title": "Transparency and Provision of Information to Deployers",
+   "text": "High-risk AI systems shall be designed and developed to ensure that their operation is sufficiently transparent to enable deployers to interpret the system's output and use it appropriately. A comprehensive instructions for use document shall be provided, including: identity and contact details of provider; characteristics, capabilities, and limitations; accuracy metrics; known risks; human oversight measures required; expected lifetime.",
+   "scope": "High-risk AI system providers",
+   "risk_tiers_applicable": [
+    "high_risk",
+    "limited_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_13.C1",
+     "description": "Produce and maintain an Instructions for Use document for each high-risk AI system",
+     "evidence_needed": [
+      "Instructions for Use document",
+      "Version control records"
+     ]
+    },
+    {
+     "id": "Article_13.C2",
+     "description": "Disclose system capabilities, limitations, and known failure modes to deployers",
+     "evidence_needed": [
+      "Capability/limitation disclosure",
+      "Model card or equivalent"
+     ]
+    },
+    {
+     "id": "Article_13.C3",
+     "description": "For AI chatbots and other limited-risk systems, disclose to users that they are interacting with AI",
+     "evidence_needed": [
+      "AI disclosure mechanism",
+      "User interface screenshots"
+     ]
+    },
+    {
+     "id": "Article_13.C4",
+     "description": "Provide accuracy, robustness, and cybersecurity performance metrics",
+     "evidence_needed": [
+      "Performance metrics documentation",
+      "Benchmark test reports"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_14",
+   "title": "Human Oversight",
+   "text": "High-risk AI systems shall be designed and developed to be effectively overseen by natural persons during the period of use. Providers shall ensure that natural persons assigned to oversight are able to: fully understand the capacities and limitations of the system; monitor its operation; detect and address anomalies, malfunctions, and unexpected performance; interpret outputs; and be able to disregard, override, or reverse the outputs.",
+   "scope": "High-risk AI system providers and deployers",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_14.C1",
+     "description": "Define and document human oversight roles, responsibilities, and override procedures for each high-risk AI system",
+     "evidence_needed": [
+      "Oversight RACI",
+      "Override procedure documentation"
+     ]
+    },
+    {
+     "id": "Article_14.C2",
+     "description": "Implement technical mechanisms enabling humans to pause, override, or reject AI outputs",
+     "evidence_needed": [
+      "Override mechanism design documentation",
+      "User acceptance testing records"
+     ]
+    },
+    {
+     "id": "Article_14.C3",
+     "description": "Provide training to all personnel responsible for AI oversight",
+     "evidence_needed": [
+      "Training curriculum",
+      "Training completion records"
+     ]
+    },
+    {
+     "id": "Article_14.C4",
+     "description": "Monitor and measure effectiveness of human oversight in practice",
+     "evidence_needed": [
+      "Override usage statistics",
+      "Oversight effectiveness review"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_15",
+   "title": "Accuracy, Robustness, and Cybersecurity",
+   "text": "High-risk AI systems shall be designed and developed to achieve an appropriate level of accuracy, robustness, and cybersecurity, and to perform consistently in these respects throughout their lifecycle. High-risk AI systems shall be resilient against attempts by third parties to alter their use, outputs, or performance through adversarial attacks. Technical solutions shall address the problem of AI-specific vulnerabilities.",
+   "scope": "High-risk AI system providers",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_15.C1",
+     "description": "Define and measure accuracy metrics appropriate to the use case; document acceptance thresholds",
+     "evidence_needed": [
+      "Accuracy metric definitions",
+      "Benchmark results",
+      "Acceptance criteria"
+     ]
+    },
+    {
+     "id": "Article_15.C2",
+     "description": "Conduct robustness testing including edge cases, distributional shift, and adversarial inputs",
+     "evidence_needed": [
+      "Robustness test plan",
+      "Test results",
+      "Adversarial testing report"
+     ]
+    },
+    {
+     "id": "Article_15.C3",
+     "description": "Implement cybersecurity controls addressing AI-specific threats (model inversion, data poisoning, evasion attacks)",
+     "evidence_needed": [
+      "AI security threat model",
+      "Security control implementation evidence"
+     ]
+    },
+    {
+     "id": "Article_15.C4",
+     "description": "Establish ongoing monitoring for accuracy and robustness degradation in production",
+     "evidence_needed": [
+      "Production monitoring dashboard",
+      "Drift detection configuration"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Annex_III",
+   "title": "High-Risk AI System Categories",
+   "text": "AI systems referred to in Article 6(2). Categories include: (1) biometric identification and categorisation; (2) management of critical infrastructure; (3) education and vocational training; (4) employment, worker management, and access to self-employment; (5) access to and enjoyment of essential private services and essential public services and benefits; (6) law enforcement; (7) migration, asylum, and border control management; (8) administration of justice and democratic processes.",
+   "scope": "AI system providers whose systems fall within listed categories",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Annex_III.C1",
+     "description": "Map each AI system in scope against all eight Annex III categories with documented justification",
+     "evidence_needed": [
+      "Annex III mapping assessment",
+      "Legal/compliance sign-off"
+     ]
+    },
+    {
+     "id": "Annex_III.C2",
+     "description": "Apply all Chapter III Section 2 requirements to any system classified under Annex III",
+     "evidence_needed": [
+      "Compliance programme evidence for each Article 9–15 requirement"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "Article_49",
+   "title": "EU Declaration of Conformity and CE Marking",
+   "text": "Before placing a high-risk AI system on the market, the provider shall draw up an EU declaration of conformity in accordance with Article 47. The provider shall affix CE marking to the high-risk AI system. The EU declaration of conformity shall be kept by the provider for ten years after the high-risk AI system has been placed on the market or put into service.",
+   "scope": "Providers of high-risk AI systems",
+   "risk_tiers_applicable": [
+    "high_risk"
+   ],
+   "controls": [
+    {
+     "id": "Article_49.C1",
+     "description": "Complete EU Declaration of Conformity process before market placement of high-risk AI systems",
+     "evidence_needed": [
+      "EU Declaration of Conformity document",
+      "Third-party assessment report (where required)"
+     ]
+    },
+    {
+     "id": "Article_49.C2",
+     "description": "Maintain DoC and supporting technical documentation for minimum 10 years post-market",
+     "evidence_needed": [
+      "Document retention policy",
+      "Document management system records"
+     ]
+    },
+    {
+     "id": "Article_49.C3",
+     "description": "Register the AI system in the EU AI public database prior to placing on market",
+     "evidence_needed": [
+      "EU AI database registration record"
+     ]
+    }
+   ]
+  }
+ ],
+ "provenance": {
+  "source": "cs-trustops-studio/trustops-gap-analysis-agent frameworks/eu_ai_act",
+  "imported": "2026-10-11",
+  "review_status": "PENDING_LEGAL_REVIEW",
+  "notice": "CloudSeals working interpretation for candidate gap analysis. Not legal advice and not a determination of regulatory applicability."
+ }
+}

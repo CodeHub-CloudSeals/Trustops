@@ -1,0 +1,27 @@
+# Real inference against synthetic data, isolated from the API's customer state and credentials.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker network create trustops-model-check
+        trap 'docker rm -f trustops-acceptance-model >/dev/null 2>&1 || true; docker network rm trustops-model-check >/dev/null 2>&1 || true' EXIT
+        docker run -d --name trustops-acceptance-model --network trustops-model-check --network-alias ollama --cpus=4 --memory=12g ${_MODEL_IMAGE}
+        # Save failure artifacts too; the final step decides pass/fail. Synthetic diagnostics are in build logs.
+        docker run --rm --network trustops-model-check -v /workspace:/workspace -w /workspace \
+          -e TAAD_LLM_PROVIDER=ollama -e TAAD_OLLAMA_URL=http://ollama:11434 -e TAAD_OLLAMA_MODEL=qwen3:4b -e TAAD_OLLAMA_TIMEOUT=600 \
+          python:3.12-slim python scripts/verify_model_pipeline.py --output-dir /workspace/model-acceptance ${_ACCEPTANCE_ARGS} || true
+        test -s /workspace/model-acceptance/model-acceptance.json
+  - name: python:3.12-slim
+    entrypoint: python
+    args: ['-c', 'import json; r=json.load(open("/workspace/model-acceptance/model-acceptance.json")); assert r["passed"], "Model acceptance did not pass"']
+substitutions:
+  _ACCEPTANCE_ARGS: ''
+  _MODEL_IMAGE: europe-west1-docker.pkg.dev/trustops-uat/taad/ollama@sha256:ff46fbdbcce444bb3937cc36e558f9f5dd0558bededb19ccf5647a6b68716ea2
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/taad-build@$PROJECT_ID.iam.gserviceaccount.com
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_32
+timeout: 1800s

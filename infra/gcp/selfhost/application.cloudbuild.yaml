@@ -1,0 +1,15 @@
+# Rebuild the API without downloading unchanged model weights again.
+steps:
+  - name: python:3.12-slim
+    entrypoint: bash
+    args: ['-c', 'pip install --disable-pip-version-check -r requirements-dev.txt && pytest -q --ignore=tests/browser && ruff check .']
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/api:$BUILD_ID', .]
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/api:$BUILD_ID'
+substitutions:
+  _REGION: europe-west1
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/taad-build@$PROJECT_ID.iam.gserviceaccount.com
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s

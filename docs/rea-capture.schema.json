@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "Network": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "maxLength": 1000,
+          "title": "Url",
+          "type": "string"
+        },
+        "method": {
+          "pattern": "^[A-Z]{1,16}$",
+          "title": "Method",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "maximum": 599,
+              "minimum": 100,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "url",
+        "method"
+      ],
+      "title": "Network",
+      "type": "object"
+    },
+    "PageMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "maxLength": 300,
+          "title": "Title",
+          "type": "string"
+        },
+        "http_status": {
+          "maximum": 599,
+          "minimum": 100,
+          "title": "Http Status",
+          "type": "integer"
+        },
+        "content_type": {
+          "maxLength": 200,
+          "title": "Content Type",
+          "type": "string"
+        },
+        "security_headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 6,
+          "title": "Security Headers",
+          "type": "object"
+        }
+      },
+      "required": [
+        "title",
+        "http_status",
+        "content_type",
+        "security_headers"
+      ],
+      "title": "PageMetadata",
+      "type": "object"
+    },
+    "Script": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "maxLength": 1000,
+          "title": "Url",
+          "type": "string"
+        },
+        "reported_hash": {
+          "anyOf": [
+            {
+              "maxLength": 150,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reported Hash"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Script",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "trustops.rea.capture.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "producer": {
+      "enum": [
+        "rea-agents",
+        "trustops-http-inspector"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "producer_version": {
+      "maxLength": 40,
+      "minLength": 1,
+      "title": "Producer Version",
+      "type": "string"
+    },
+    "rea_evidence_id": {
+      "pattern": "^ev_[a-f0-9]{64}$",
+      "title": "Rea Evidence Id",
+      "type": "string"
+    },
+    "source_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "target_url": {
+      "maxLength": 1000,
+      "title": "Target Url",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "ended_at": {
+      "format": "date-time",
+      "title": "Ended At",
+      "type": "string"
+    },
+    "observation_ms": {
+      "maximum": 600000,
+      "minimum": 1,
+      "title": "Observation Ms",
+      "type": "integer"
+    },
+    "dom_nodes": {
+      "maximum": 1000000,
+      "minimum": 0,
+      "title": "Dom Nodes",
+      "type": "integer"
+    },
+    "scripts": {
+      "items": {
+        "$ref": "#/$defs/Script"
+      },
+      "maxItems": 200,
+      "title": "Scripts",
+      "type": "array"
+    },
+    "requests": {
+      "items": {
+        "$ref": "#/$defs/Network"
+      },
+      "maxItems": 300,
+      "title": "Requests",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 60,
+      "title": "Limitations",
+      "type": "array"
+    },
+    "page": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PageMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version",
+    "producer",
+    "producer_version",
+    "rea_evidence_id",
+    "source_sha256",
+    "target_url",
+    "started_at",
+    "ended_at",
+    "observation_ms",
+    "dom_nodes",
+    "scripts",
+    "requests",
+    "limitations"
+  ],
+  "title": "Capture",
+  "type": "object"
+}

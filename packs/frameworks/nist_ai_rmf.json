@@ -1,0 +1,602 @@
+{
+ "framework": {
+  "id": "nist_ai_rmf",
+  "name": "NIST AI Risk Management Framework",
+  "short_name": "NIST AI RMF",
+  "version": "AI RMF 1.0",
+  "published_date": "2023-01-26",
+  "issuing_body": "National Institute of Standards and Technology (NIST)",
+  "jurisdiction": "United States (voluntary, globally referenced)",
+  "description": "A voluntary framework for managing AI risks to individuals, organisations, and society. Provides a structured approach through four core functions — GOVERN, MAP, MEASURE, MANAGE — each with categories and subcategories. Designed for flexibility across sectors, use cases, and risk levels. Complementary to ISO 42001 and the EU AI Act.",
+  "risk_tiers": [
+   "all"
+  ],
+  "voluntary": true,
+  "core_functions": [
+   "GOVERN",
+   "MAP",
+   "MEASURE",
+   "MANAGE"
+  ]
+ },
+ "requirements": [
+  {
+   "id": "GOVERN_1_1",
+   "title": "GOVERN 1.1 — Policies and Procedures for AI Risk",
+   "text": "Policies, processes, procedures, and practices across the organisation related to the mapping, measuring, and managing of AI risks are in place, transparent, and implemented effectively.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_1_1.C1",
+     "description": "Establish documented policies and procedures for AI risk management across the organisation",
+     "evidence_needed": [
+      "AI risk management policy",
+      "Procedures for risk identification and treatment"
+     ]
+    },
+    {
+     "id": "GOVERN_1_1.C2",
+     "description": "Ensure AI risk policies are communicated, trained on, and implemented consistently",
+     "evidence_needed": [
+      "Policy communication records",
+      "Training completion records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_1_2",
+   "title": "GOVERN 1.2 — Accountability for AI Risk",
+   "text": "Accountability structures are in place for AI risk management so that individuals and organisational units are accountable for AI risk decisions. Roles and responsibilities include those from development to deployment.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_1_2.C1",
+     "description": "Define and document accountability for AI risk decisions at system and portfolio level",
+     "evidence_needed": [
+      "AI governance RACI",
+      "Executive accountability statement"
+     ]
+    },
+    {
+     "id": "GOVERN_1_2.C2",
+     "description": "Establish an AI governance body or committee with documented terms and cadence",
+     "evidence_needed": [
+      "Governance committee charter",
+      "Meeting minutes"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_1_3",
+   "title": "GOVERN 1.3 — Organisational Teams and Culture",
+   "text": "Organisational teams are committed to a culture that considers and communicates AI risk. Teams have diverse backgrounds, skills, and expertise to contribute to AI risk management from development through deployment.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_1_3.C1",
+     "description": "Build AI risk management teams with diverse technical, ethical, legal, and domain expertise",
+     "evidence_needed": [
+      "Team composition documentation",
+      "Diversity and expertise evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_2_1",
+   "title": "GOVERN 2.1 — AI Risk Tolerance",
+   "text": "Organisational risk tolerances are determined and communicated, and serve as inputs for AI system risk determinations. Risk tolerance statements are specific to AI use cases and updated as AI contexts change.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_2_1.C1",
+     "description": "Define and document AI risk tolerance statements at organisational and system level",
+     "evidence_needed": [
+      "AI risk appetite statement",
+      "Risk tolerance parameters"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_3_1",
+   "title": "GOVERN 3.1 — AI Risk Workforce",
+   "text": "AI risk management knowledge, skills, and abilities exist throughout the organisation. Personnel understand their AI risk responsibilities and have access to appropriate training and development.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_3_1.C1",
+     "description": "Assess and address AI risk management competency gaps across the workforce",
+     "evidence_needed": [
+      "Competency assessment",
+      "Training records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_4_1",
+   "title": "GOVERN 4.1 — Organisational Teams Reflecting Society",
+   "text": "Organisational teams developing, deploying, and overseeing AI systems represent diverse backgrounds and lived experiences. Diverse perspectives are actively sought in AI design, development, deployment, and governance.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_4_1.C1",
+     "description": "Implement practices to ensure diverse and inclusive AI teams",
+     "evidence_needed": [
+      "Diversity programme documentation",
+      "Team composition data"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_5_1",
+   "title": "GOVERN 5.1 — Organisational Policies for Third-Party AI",
+   "text": "Organisational policies and practices are in place for third-party AI entities, including vendors, AI developers, deployers, operators, and other AI supply chain actors. Due diligence processes address AI risk in procurement and contracting.",
+   "scope": "All AI deploying organisations using third-party AI",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_5_1.C1",
+     "description": "Establish AI vendor due diligence and risk assessment processes",
+     "evidence_needed": [
+      "AI procurement policy",
+      "Vendor assessment records"
+     ]
+    },
+    {
+     "id": "GOVERN_5_1.C2",
+     "description": "Include AI risk provisions in third-party contracts",
+     "evidence_needed": [
+      "AI contract templates with risk clauses",
+      "Contract samples"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "GOVERN_6_1",
+   "title": "GOVERN 6.1 — Policies for AI Risk in Acquisition",
+   "text": "Policies and procedures are in place for AI procurement and acquisition such that AI risk is evaluated in the procurement process and appropriate risk management requirements are passed to AI suppliers.",
+   "scope": "All AI deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "GOVERN",
+   "controls": [
+    {
+     "id": "GOVERN_6_1.C1",
+     "description": "Embed AI risk assessment in the procurement lifecycle",
+     "evidence_needed": [
+      "Procurement risk assessment procedure",
+      "AI procurement checklist"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MAP_1_1",
+   "title": "MAP 1.1 — AI System Context",
+   "text": "Context is established for the AI risk assessment. This includes understanding the intended purpose, potential harms, and benefits of the AI system; the deployment context; affected individuals and groups; and the regulatory and policy environment.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MAP",
+   "controls": [
+    {
+     "id": "MAP_1_1.C1",
+     "description": "Document intended use, deployment context, and affected populations for each AI system",
+     "evidence_needed": [
+      "AI system purpose statement",
+      "Deployment context analysis",
+      "Affected population analysis"
+     ]
+    },
+    {
+     "id": "MAP_1_1.C2",
+     "description": "Map applicable regulatory requirements to each AI system",
+     "evidence_needed": [
+      "Regulatory mapping document",
+      "Compliance obligations register"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MAP_1_5",
+   "title": "MAP 1.5 — AI System Organisational Risk Priorities",
+   "text": "Organisational risk priorities are understood and documented. AI risk assessments are aligned with organisational risk management practices and enterprise risk frameworks.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MAP",
+   "controls": [
+    {
+     "id": "MAP_1_5.C1",
+     "description": "Integrate AI risk into enterprise risk management frameworks",
+     "evidence_needed": [
+      "Enterprise risk framework documentation",
+      "AI risk integration evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MAP_2_1",
+   "title": "MAP 2.1 — Scientific Basis for AI Use Case",
+   "text": "The scientific basis for the AI system's use case is understood and documented. Assumptions, constraints, and limitations are known and communicated to relevant stakeholders.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MAP",
+   "controls": [
+    {
+     "id": "MAP_2_1.C1",
+     "description": "Document the technical and scientific basis for the AI system including assumptions and known limitations",
+     "evidence_needed": [
+      "Model documentation",
+      "Technical specifications",
+      "Limitation disclosure"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MAP_3_1",
+   "title": "MAP 3.1 — AI System Risk Identification",
+   "text": "Risks of the AI system in the context of intended deployment are identified and catalogued. Potential harms to individuals, groups, and society are enumerated. Positive impacts are also identified.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MAP",
+   "controls": [
+    {
+     "id": "MAP_3_1.C1",
+     "description": "Maintain a risk catalogue for each AI system covering harms to individuals, groups, and society",
+     "evidence_needed": [
+      "AI risk catalogue",
+      "Impact analysis documentation"
+     ]
+    },
+    {
+     "id": "MAP_3_1.C2",
+     "description": "Identify and document potential for disparate impacts across demographic groups",
+     "evidence_needed": [
+      "Disparate impact analysis",
+      "Subgroup performance evaluation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MAP_5_1",
+   "title": "MAP 5.1 — Likelihood and Impact of AI Risks",
+   "text": "Likelihood and magnitude of each identified AI risk is estimated and documented. Risk prioritisation is based on a combination of likelihood and impact, with higher priority given to risks affecting fundamental rights and safety.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MAP",
+   "controls": [
+    {
+     "id": "MAP_5_1.C1",
+     "description": "Apply consistent risk scoring methodology to estimate likelihood and impact of AI risks",
+     "evidence_needed": [
+      "Risk scoring methodology",
+      "Scored risk register"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_1_1",
+   "title": "MEASURE 1.1 — AI Risk Measurement Approaches",
+   "text": "Approaches and metrics for measuring AI risks are established and agreed upon. Measurement methods are appropriate for the AI use case and risk level. Both quantitative and qualitative measures are used.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_1_1.C1",
+     "description": "Define quantitative and qualitative metrics for AI risk measurement per system",
+     "evidence_needed": [
+      "Risk metrics framework",
+      "Measurement methodology documentation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_2_1",
+   "title": "MEASURE 2.1 — AI System Testing and Evaluation",
+   "text": "Test sets that reflect the intended operational environment are used to evaluate AI system performance and trustworthiness before deployment. Testing includes adversarial testing, bias testing, and performance across diverse population subgroups.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_2_1.C1",
+     "description": "Conduct pre-deployment testing across representative and adversarial scenarios",
+     "evidence_needed": [
+      "Test plan",
+      "Test results",
+      "Adversarial test report"
+     ]
+    },
+    {
+     "id": "MEASURE_2_1.C2",
+     "description": "Evaluate model performance across demographic subgroups and document disparate performance",
+     "evidence_needed": [
+      "Subgroup analysis results",
+      "Fairness metrics report"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_2_2",
+   "title": "MEASURE 2.2 — AI System Explainability",
+   "text": "AI system outputs can be explained in a manner consistent with the intended deployment context and use case. Explainability methods are documented and appropriate to the risk level and audience (technical and non-technical stakeholders).",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_2_2.C1",
+     "description": "Implement and document explainability approaches appropriate to the model type and use case",
+     "evidence_needed": [
+      "Explainability methodology",
+      "Sample explanations for consequential decisions"
+     ]
+    },
+    {
+     "id": "MEASURE_2_2.C2",
+     "description": "Validate that explanations are meaningful and actionable for the intended audience",
+     "evidence_needed": [
+      "User testing of explanations",
+      "Explainability evaluation report"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_2_5",
+   "title": "MEASURE 2.5 — AI System Bias and Fairness",
+   "text": "Bias and fairness assessments are conducted and documented. Assessment covers statistical bias in training data, algorithmic bias in model design, and deployment bias in the operational context. Findings inform mitigation measures.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_2_5.C1",
+     "description": "Conduct structured bias assessments covering training data, model algorithm, and deployment context",
+     "evidence_needed": [
+      "Bias assessment methodology",
+      "Bias assessment results",
+      "Remediation actions"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_2_6",
+   "title": "MEASURE 2.6 — AI System Security",
+   "text": "The AI system is evaluated for cybersecurity risks including adversarial attacks, data poisoning, model inversion, and prompt injection. Security testing is conducted before deployment and on an ongoing basis.",
+   "scope": "AI developers and deployers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_2_6.C1",
+     "description": "Conduct AI-specific security testing including adversarial robustness evaluation",
+     "evidence_needed": [
+      "AI security test plan",
+      "Security test results",
+      "Vulnerability remediation records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_2_7",
+   "title": "MEASURE 2.7 — AI System Privacy",
+   "text": "Privacy risks of the AI system are identified and evaluated. Assessments cover personal data used in training and inference, potential for re-identification, and differential privacy considerations.",
+   "scope": "AI developers and deployers using personal data",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_2_7.C1",
+     "description": "Conduct privacy risk assessment for AI systems using personal data",
+     "evidence_needed": [
+      "Privacy impact assessment",
+      "Data minimisation evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MEASURE_4_1",
+   "title": "MEASURE 4.1 — Post-Deployment AI Performance Monitoring",
+   "text": "Deployed AI systems are monitored to evaluate the continued reliability and safety of the AI system. Performance metrics are tracked against defined thresholds and deviations trigger review and response.",
+   "scope": "AI deployers and operators",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MEASURE",
+   "controls": [
+    {
+     "id": "MEASURE_4_1.C1",
+     "description": "Implement production monitoring for AI system performance, drift, and anomalous outputs",
+     "evidence_needed": [
+      "Monitoring architecture",
+      "Alert thresholds documentation",
+      "Monitoring dashboards"
+     ]
+    },
+    {
+     "id": "MEASURE_4_1.C2",
+     "description": "Define and test incident response procedures for AI system performance failures",
+     "evidence_needed": [
+      "AI incident response plan",
+      "Incident response test records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MANAGE_1_1",
+   "title": "MANAGE 1.1 — AI Risk Treatment Plans",
+   "text": "Responses to identified AI risks are planned. Risk response options include avoidance, mitigation, transfer, and acceptance. Risk treatment plans are documented and actioned.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MANAGE",
+   "controls": [
+    {
+     "id": "MANAGE_1_1.C1",
+     "description": "Produce and implement risk treatment plans for all identified AI risks",
+     "evidence_needed": [
+      "Risk treatment plan",
+      "Treatment implementation evidence",
+      "Residual risk records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MANAGE_1_3",
+   "title": "MANAGE 1.3 — Responses to AI Incidents",
+   "text": "Responses to AI risks and incidents follow documented procedures. Incidents are classified, investigated, and remediated in a timely manner. Lessons learned are captured and feed into risk management improvement.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MANAGE",
+   "controls": [
+    {
+     "id": "MANAGE_1_3.C1",
+     "description": "Maintain an AI incident management process with defined classification, escalation, and response procedures",
+     "evidence_needed": [
+      "AI incident management procedure",
+      "Incident log",
+      "Post-incident review records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MANAGE_2_2",
+   "title": "MANAGE 2.2 — AI System Decommissioning",
+   "text": "Mechanisms are in place to deactivate, roll back, or decommission AI systems that no longer meet risk tolerance requirements or have demonstrated harmful impacts. Decommissioning plans are documented.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MANAGE",
+   "controls": [
+    {
+     "id": "MANAGE_2_2.C1",
+     "description": "Define and test AI system shutdown and rollback procedures",
+     "evidence_needed": [
+      "Shutdown/rollback procedure",
+      "Test records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MANAGE_3_1",
+   "title": "MANAGE 3.1 — AI Risk and Benefit Communication",
+   "text": "AI risks and benefits are communicated to affected parties including users, affected communities, and regulators. Communication is clear, timely, and appropriate to the audience.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MANAGE",
+   "controls": [
+    {
+     "id": "MANAGE_3_1.C1",
+     "description": "Establish communication plans for AI risk reporting to stakeholders",
+     "evidence_needed": [
+      "AI risk communication plan",
+      "Stakeholder communication records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "MANAGE_4_1",
+   "title": "MANAGE 4.1 — AI Risk Management Improvement",
+   "text": "AI risk management processes are continually improved based on monitoring results, incident learnings, and changes in the AI landscape. Improvement actions are documented and tracked.",
+   "scope": "All AI developing and deploying organisations",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "function": "MANAGE",
+   "controls": [
+    {
+     "id": "MANAGE_4_1.C1",
+     "description": "Conduct periodic reviews of AI risk management effectiveness and implement improvements",
+     "evidence_needed": [
+      "Management review records",
+      "Improvement action log"
+     ]
+    }
+   ]
+  }
+ ],
+ "provenance": {
+  "source": "cs-trustops-studio/trustops-gap-analysis-agent frameworks/nist_ai_rmf",
+  "imported": "2026-10-11",
+  "review_status": "PENDING_LEGAL_REVIEW",
+  "notice": "CloudSeals working interpretation for candidate gap analysis. Not legal advice and not a determination of regulatory applicability."
+ }
+}

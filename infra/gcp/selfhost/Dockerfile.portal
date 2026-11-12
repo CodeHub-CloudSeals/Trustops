@@ -1,0 +1,4 @@
+# Reuse a tested API image; this layer changes static portal files only.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY apps/portal-web /app/apps/portal-web

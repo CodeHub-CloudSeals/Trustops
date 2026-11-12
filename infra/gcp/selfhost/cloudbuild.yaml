@@ -1,0 +1,18 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: model-image
+    args: [build, -f, infra/gcp/selfhost/Dockerfile.ollama, --build-arg, 'MODEL=${_MODEL}', -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/ollama:$BUILD_ID', .]
+  - name: gcr.io/cloud-builders/docker
+    id: api-image
+    waitFor: ['-']
+    args: [build, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/api:$BUILD_ID', .]
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/ollama:$BUILD_ID'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/taad/api:$BUILD_ID'
+substitutions:
+  _REGION: europe-west1
+  _MODEL: 'qwen3:4b'
+timeout: 1800s
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/taad-build@$PROJECT_ID.iam.gserviceaccount.com
+options:
+  logging: CLOUD_LOGGING_ONLY

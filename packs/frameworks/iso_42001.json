@@ -1,0 +1,561 @@
+{
+ "framework": {
+  "id": "iso_42001",
+  "name": "ISO/IEC 42001:2023",
+  "short_name": "ISO 42001",
+  "version": "ISO/IEC 42001:2023",
+  "published_date": "2023-12-18",
+  "issuing_body": "International Organization for Standardization (ISO)",
+  "jurisdiction": "Global (voluntary standard)",
+  "description": "The first international standard specifying requirements for establishing, implementing, maintaining, and continually improving an Artificial Intelligence Management System (AIMS) within the context of an organisation. Based on the ISO High Level Structure (Annex SL) for compatibility with other ISO management system standards. Includes normative requirements and an informative Annex A of extended controls.",
+  "risk_tiers": [
+   "all"
+  ],
+  "certification_available": true,
+  "compatible_with": [
+   "ISO 27001",
+   "ISO 9001",
+   "ISO 31000"
+  ]
+ },
+ "requirements": [
+  {
+   "id": "4_Context",
+   "title": "Section 4 — Context of the Organisation",
+   "text": "The organisation shall determine external and internal issues relevant to its AI purposes and objectives. It shall identify interested parties and their requirements relevant to the AIMS. The organisation shall understand the AI context including the AI policy framework and societal context in which AI systems are developed and used.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "4.1",
+     "description": "Document internal and external context relevant to the organisation's AI activities",
+     "evidence_needed": [
+      "Context analysis document",
+      "AIMS scope document"
+     ]
+    },
+    {
+     "id": "4.2",
+     "description": "Identify and document interested parties and their AI-related requirements and expectations",
+     "evidence_needed": [
+      "Stakeholder register",
+      "Requirements analysis"
+     ]
+    },
+    {
+     "id": "4.3",
+     "description": "Define the scope of the AIMS, including boundaries and applicability",
+     "evidence_needed": [
+      "AIMS scope statement",
+      "Scope justification"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "5_Leadership",
+   "title": "Section 5 — Leadership",
+   "text": "Top management shall demonstrate leadership and commitment by taking accountability for the effectiveness of the AIMS; ensuring AI policy and objectives are established; promoting a culture of responsible AI; and ensuring integration of AIMS requirements into the organisation's business processes. An AI policy shall be established, communicated, and maintained.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "5.1",
+     "description": "Evidence of top management commitment to the AIMS, including AI policy endorsement",
+     "evidence_needed": [
+      "Board/C-suite AI policy approval",
+      "Management review minutes"
+     ]
+    },
+    {
+     "id": "5.2",
+     "description": "Publish, implement, and communicate an AI policy aligned to the organisation's AI objectives",
+     "evidence_needed": [
+      "Published AI policy",
+      "Communication records"
+     ]
+    },
+    {
+     "id": "5.3",
+     "description": "Assign and communicate AIMS roles, responsibilities, and authorities",
+     "evidence_needed": [
+      "RACI for AI governance",
+      "Role descriptions"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "6_1_2_AI_Risk_Assessment",
+   "title": "Clause 6.1.2 — AI Risk Assessment",
+   "text": "The organisation shall establish, implement, and maintain an AI risk assessment process that: identifies AI-related risks and opportunities; analyses risk likelihood and impact; evaluates risks against risk criteria; considers AI system impacts on people and society; and documents results. The risk assessment shall include AI system impact assessment as per Annex A controls.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "6.1.2.C1",
+     "description": "Establish and operate a documented AI risk assessment process",
+     "evidence_needed": [
+      "AI risk assessment procedure",
+      "Risk assessment records per AI system"
+     ]
+    },
+    {
+     "id": "6.1.2.C2",
+     "description": "Assess impacts of AI systems on individuals, groups, and society",
+     "evidence_needed": [
+      "AI impact assessment reports",
+      "Societal impact analysis"
+     ]
+    },
+    {
+     "id": "6.1.2.C3",
+     "description": "Maintain a risk register covering all in-scope AI systems",
+     "evidence_needed": [
+      "AI risk register",
+      "Risk scoring methodology"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "6_1_3_AI_Risk_Treatment",
+   "title": "Clause 6.1.3 — AI Risk Treatment",
+   "text": "The organisation shall select and implement appropriate risk treatment options for AI risks, produce an AI risk treatment plan, and obtain approval for the plan and acceptance of residual risks from risk owners. Treatment options include: applying controls; avoiding the AI activity; sharing risk; or accepting risk.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "6.1.3.C1",
+     "description": "Develop and implement an AI risk treatment plan for all identified AI risks",
+     "evidence_needed": [
+      "Risk treatment plan",
+      "Control implementation evidence"
+     ]
+    },
+    {
+     "id": "6.1.3.C2",
+     "description": "Obtain documented risk acceptance from designated risk owners for residual risks",
+     "evidence_needed": [
+      "Risk acceptance records",
+      "Risk owner sign-off"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "8_4_AI_System_Impact_Assessment",
+   "title": "Clause 8.4 — AI System Impact Assessment",
+   "text": "The organisation shall carry out AI system impact assessments to identify and evaluate potential impacts of AI systems on individuals and groups. Impact assessments shall consider: impacts on rights and freedoms; environmental impacts; societal impacts; and impacts specific to vulnerable groups. Results shall be documented and inform system design decisions.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "8.4.C1",
+     "description": "Conduct documented impact assessments for each AI system covering rights, freedoms, and societal impacts",
+     "evidence_needed": [
+      "AI impact assessment reports",
+      "Impact assessment methodology"
+     ]
+    },
+    {
+     "id": "8.4.C2",
+     "description": "Consider impacts on vulnerable groups including children, elderly, and protected characteristics",
+     "evidence_needed": [
+      "Vulnerable group impact analysis",
+      "Fairness assessment"
+     ]
+    },
+    {
+     "id": "8.4.C3",
+     "description": "Use impact assessment results to inform design, development, and deployment decisions",
+     "evidence_needed": [
+      "Design decision records linked to impact assessments",
+      "Change management records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "8_5_AI_System_Lifecycle",
+   "title": "Clause 8.5 — AI System Lifecycle",
+   "text": "The organisation shall plan, implement, and control the processes needed for the AI system lifecycle including: design and development; procurement and acquisition; deployment and integration; operation and monitoring; and decommissioning. The organisation shall document lifecycle stages and apply appropriate controls at each stage.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "8.5.C1",
+     "description": "Define and document AI system lifecycle stages and applicable governance controls for each stage",
+     "evidence_needed": [
+      "AI SDLC policy",
+      "Lifecycle stage documentation per system"
+     ]
+    },
+    {
+     "id": "8.5.C2",
+     "description": "Apply security, privacy, and bias controls throughout the AI development and deployment lifecycle",
+     "evidence_needed": [
+      "Security control records",
+      "Privacy impact assessment",
+      "Bias testing records"
+     ]
+    },
+    {
+     "id": "8.5.C3",
+     "description": "Define and execute a decommissioning plan when AI systems are retired",
+     "evidence_needed": [
+      "Decommissioning procedure",
+      "Decommissioning records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "9_1_Monitoring",
+   "title": "Clause 9.1 — Monitoring, Measurement, Analysis, and Evaluation",
+   "text": "The organisation shall determine what needs to be monitored and measured, including AI system performance; methods for monitoring, measurement, analysis, and evaluation; when the monitoring and measuring shall be performed; and when the results shall be analysed and evaluated. Documented information shall be retained as evidence of the results.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "9.1.C1",
+     "description": "Define KPIs and monitoring metrics for each AI system in production",
+     "evidence_needed": [
+      "AI monitoring KPI framework",
+      "Monitoring dashboards"
+     ]
+    },
+    {
+     "id": "9.1.C2",
+     "description": "Conduct periodic performance evaluations and document results",
+     "evidence_needed": [
+      "Performance evaluation records",
+      "Trend analysis reports"
+     ]
+    },
+    {
+     "id": "9.1.C3",
+     "description": "Implement automated alerting for performance degradation or anomalous behaviour",
+     "evidence_needed": [
+      "Alert configuration",
+      "Alert response records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_2_Policies",
+   "title": "Annex A.2 — Policies for AI",
+   "text": "The organisation shall establish policies relating to AI as part of the AIMS to define principles, requirements, and responsibilities for responsible AI development and use. Policies shall address: AI ethics principles; acceptable use of AI; data governance for AI; human oversight requirements; and AI transparency.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.2.1",
+     "description": "Establish and communicate an AI ethics policy covering fairness, transparency, accountability, and privacy",
+     "evidence_needed": [
+      "AI ethics policy",
+      "Communication records"
+     ]
+    },
+    {
+     "id": "A.2.2",
+     "description": "Define acceptable use of AI systems with explicit prohibited use cases",
+     "evidence_needed": [
+      "Acceptable use policy",
+      "Prohibited use list"
+     ]
+    },
+    {
+     "id": "A.2.3",
+     "description": "Establish a data governance policy specific to AI training and operation",
+     "evidence_needed": [
+      "AI data governance policy",
+      "Data classification for AI"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_3_Internal_Organisation",
+   "title": "Annex A.3 — Internal Organisation",
+   "text": "The organisation shall define its internal organisation for AI governance including: a designated AI governance function or role; cross-functional AI review processes; escalation paths for AI-related issues; and clear accountability for AI decisions.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.3.1",
+     "description": "Establish a designated AI governance function (committee, board, or role) with documented terms of reference",
+     "evidence_needed": [
+      "AI governance committee charter",
+      "Meeting minutes"
+     ]
+    },
+    {
+     "id": "A.3.2",
+     "description": "Define clear accountability for AI decisions at the individual system level",
+     "evidence_needed": [
+      "AI system ownership register",
+      "Accountability framework"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_4_Resources",
+   "title": "Annex A.4 — Resources for AI",
+   "text": "The organisation shall ensure adequate resources for responsible AI including: competent AI practitioners; data science and ethics expertise; legal and compliance capability for AI regulation; compute infrastructure with appropriate security controls; and ongoing training budget.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.4.1",
+     "description": "Assess and maintain AI competence requirements across technical, ethical, legal, and governance dimensions",
+     "evidence_needed": [
+      "AI competence framework",
+      "Skills gap assessment"
+     ]
+    },
+    {
+     "id": "A.4.2",
+     "description": "Provide ongoing AI training and awareness for all staff involved in AI activities",
+     "evidence_needed": [
+      "Training programme records",
+      "Training completion data"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_5_Impacts",
+   "title": "Annex A.5 — AI System Impacts on Individuals and Society",
+   "text": "The organisation shall identify and address potential negative impacts of AI systems including: discrimination and fairness harms; privacy violations; safety impacts; environmental impacts from compute; manipulation and deception risks; and impacts on human agency and decision-making autonomy.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.5.1",
+     "description": "Conduct fairness assessments covering protected characteristics for each AI system",
+     "evidence_needed": [
+      "Fairness assessment methodology",
+      "Fairness test results per system"
+     ]
+    },
+    {
+     "id": "A.5.2",
+     "description": "Assess and mitigate privacy risks in AI system design and operation",
+     "evidence_needed": [
+      "Privacy impact assessment",
+      "Privacy-by-design evidence"
+     ]
+    },
+    {
+     "id": "A.5.3",
+     "description": "Assess environmental impact of AI compute and implement mitigation measures",
+     "evidence_needed": [
+      "Environmental impact assessment",
+      "Carbon footprint data"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_6_AI_Lifecycle",
+   "title": "Annex A.6 — AI System Lifecycle Management",
+   "text": "The organisation shall implement controls across the full AI system lifecycle including: requirements specification; design and development; testing and validation; deployment and monitoring; change management; and decommissioning. Responsible AI principles shall be embedded at each lifecycle stage.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.6.1",
+     "description": "Maintain a documented requirements specification for each AI system including ethical requirements",
+     "evidence_needed": [
+      "Requirements specification document",
+      "Ethical requirements checklist"
+     ]
+    },
+    {
+     "id": "A.6.2",
+     "description": "Implement a change management process for AI system updates that includes re-assessment of risks",
+     "evidence_needed": [
+      "Change management procedure",
+      "Change risk assessment records"
+     ]
+    },
+    {
+     "id": "A.6.3",
+     "description": "Conduct model validation and testing before production deployment",
+     "evidence_needed": [
+      "Validation test plan",
+      "Validation results",
+      "Deployment approval records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_7_Data",
+   "title": "Annex A.7 — Data for AI Systems",
+   "text": "The organisation shall implement data controls for AI covering: data quality assurance; data lineage and provenance tracking; bias assessment in training data; personal data protection in AI datasets; dataset versioning and documentation; and controls for third-party data used in AI.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.7.1",
+     "description": "Implement data quality controls and document quality criteria for AI training and inference data",
+     "evidence_needed": [
+      "Data quality framework",
+      "Data quality audit reports"
+     ]
+    },
+    {
+     "id": "A.7.2",
+     "description": "Maintain data lineage and provenance records for AI training datasets",
+     "evidence_needed": [
+      "Data lineage documentation",
+      "Dataset cards/datasheets"
+     ]
+    },
+    {
+     "id": "A.7.3",
+     "description": "Implement controls for personal data used in AI consistent with applicable privacy regulations",
+     "evidence_needed": [
+      "Data processing register",
+      "Privacy controls implementation evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_8_Information",
+   "title": "Annex A.8 — Information for Interested Parties",
+   "text": "The organisation shall provide appropriate information to interested parties about AI systems including: disclosure of AI use; model capabilities and limitations; decision rationale (explainability); rights to contest AI decisions; and contact information for AI governance enquiries.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.8.1",
+     "description": "Implement user disclosure mechanisms for AI-generated content and AI-driven decisions",
+     "evidence_needed": [
+      "AI disclosure policy",
+      "Disclosure implementation evidence"
+     ]
+    },
+    {
+     "id": "A.8.2",
+     "description": "Provide explainability for consequential AI decisions to affected individuals",
+     "evidence_needed": [
+      "Explainability approach documentation",
+      "Sample decision explanations"
+     ]
+    },
+    {
+     "id": "A.8.3",
+     "description": "Establish and communicate a process for individuals to contest AI-driven decisions",
+     "evidence_needed": [
+      "Contest/appeal process documentation",
+      "Process communication evidence"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_9_Log_Audit",
+   "title": "Annex A.9 — Log and Audit",
+   "text": "The organisation shall implement logging and audit capabilities for AI systems to support: operational monitoring; incident investigation; regulatory compliance; and internal audit. Logs shall capture sufficient information to reconstruct AI system decisions and shall be protected against unauthorised modification.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.9.1",
+     "description": "Define and implement logging requirements for each AI system covering inputs, outputs, and decision context",
+     "evidence_needed": [
+      "Logging requirements specification",
+      "Log architecture documentation"
+     ]
+    },
+    {
+     "id": "A.9.2",
+     "description": "Protect AI system logs against tampering and ensure appropriate retention",
+     "evidence_needed": [
+      "Log integrity controls",
+      "Retention policy and implementation"
+     ]
+    },
+    {
+     "id": "A.9.3",
+     "description": "Conduct regular internal audits of AI systems against AIMS requirements",
+     "evidence_needed": [
+      "Internal audit schedule",
+      "Audit reports",
+      "Non-conformance records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A_10_Stakeholder",
+   "title": "Annex A.10 — Stakeholder Engagement",
+   "text": "The organisation shall engage with relevant stakeholders including: users of AI systems; affected communities; regulators; suppliers and third-party AI providers; and internal staff. Engagement shall inform AI design, deployment, and governance decisions.",
+   "scope": "All organisations implementing ISO 42001",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "controls": [
+    {
+     "id": "A.10.1",
+     "description": "Establish a stakeholder engagement programme for AI governance",
+     "evidence_needed": [
+      "Stakeholder engagement plan",
+      "Engagement records"
+     ]
+    },
+    {
+     "id": "A.10.2",
+     "description": "Manage third-party AI suppliers with appropriate governance controls including contractual obligations",
+     "evidence_needed": [
+      "AI supplier management policy",
+      "Supplier contracts with AI clauses",
+      "Supplier assessment records"
+     ]
+    }
+   ]
+  }
+ ],
+ "provenance": {
+  "source": "cs-trustops-studio/trustops-gap-analysis-agent frameworks/iso_42001",
+  "imported": "2026-10-11",
+  "review_status": "PENDING_LEGAL_REVIEW",
+  "notice": "CloudSeals working interpretation for candidate gap analysis. Not legal advice and not a determination of regulatory applicability."
+ }
+}

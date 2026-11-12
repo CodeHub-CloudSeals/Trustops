@@ -1,0 +1,333 @@
+openapi: 3.0.3
+info:
+  title: CloudSeals TAAD Diagnosis API
+  version: 1.0.0
+  description: Engineering design contract; examples are not a deployed service. Tenant context is determined from signed identity and server-side membership.
+servers:
+  - url: https://api.dev.example.invalid
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    assessmentId:
+      name: assessmentId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    questionId:
+      name: questionId
+      in: path
+      required: true
+      schema: {type: string}
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, maxLength: 128}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, trace_id]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        trace_id: {type: string}
+    RegistrationRequest:
+      type: object
+      required: [organisation_name, work_email, industry, jurisdiction, engagement_reference]
+      properties:
+        organisation_name: {type: string, maxLength: 200}
+        work_email: {type: string, format: email}
+        industry: {type: string}
+        jurisdiction: {type: array, items: {type: string}}
+        engagement_reference: {type: string, description: Approved POC or diagnostic engagement reference}
+    AssessmentCreate:
+      type: object
+      required: [ai_system_name, industry, questionnaire_version]
+      properties:
+        ai_system_name: {type: string}
+        industry: {type: string}
+        questionnaire_version: {type: string}
+    ScopedAnswer:
+      type: object
+      required: [scope_id, value, answer_status]
+      properties:
+        scope_id: {type: string}
+        value: {description: Type depends on registry question response_type}
+        answer_status: {type: string, enum: [answered, unknown, not_applicable, not_requested]}
+        comment: {type: string, maxLength: 5000}
+        evidence_refs: {type: array, items: {type: string}}
+    SwaskaTurn:
+      type: object
+      required: [scope_id, user_message]
+      properties:
+        scope_id: {type: string}
+        parent_question_id: {type: string}
+        user_message: {type: string, maxLength: 10000}
+    EvidenceUploadRequest:
+      type: object
+      required: [filename, content_type, file_size_bytes, claimed_sha256]
+      properties:
+        filename: {type: string}
+        content_type: {type: string}
+        file_size_bytes: {type: integer, minimum: 1}
+        claimed_sha256: {type: string}
+    ReviewDecision:
+      type: object
+      required: [decision, reviewer_reason]
+      properties:
+        decision: {type: string, enum: [approve, request_clarification, reject]}
+        reviewer_reason: {type: string}
+    POCBlueprintRequest:
+      type: object
+      required: [report_id, workflow_pack_id]
+      properties:
+        report_id: {type: string, format: uuid}
+        workflow_pack_id: {type: string}
+        customer_security_signoff_ref: {type: string}
+        cloudseals_architect_signoff_ref: {type: string}
+    WorkflowRunRequest:
+      type: object
+      required: [receipt, invoices]
+      properties:
+        receipt: {type: object, description: Synthetic receipt input; amount_minor is integer minor currency units}
+        invoices: {type: array, maxItems: 500, items: {type: object}}
+        remittance: {type: object}
+    RuntimeApprovalDecision:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+    PrepareActionRequest:
+      type: object
+      required: [run_id]
+      properties:
+        run_id: {type: string, format: uuid}
+    ExecuteActionRequest:
+      type: object
+      required: [run_id, action_token]
+      properties:
+        run_id: {type: string, format: uuid}
+        action_token: {type: string, writeOnly: true, description: One-time, 60-second, tenant/action-bound token}
+paths:
+  /v1/registration-requests:
+    post:
+      tags: [Onboarding]
+      summary: Request organisation onboarding; rate limited and checked against engagement
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegistrationRequest'}
+      responses:
+        '202': {description: Verification and approval pending}
+        '400': {description: Invalid request}
+        '429': {description: Rate-limited}
+  /v1/assessments:
+    post:
+      tags: [Assessments]
+      summary: Create an assessment pinned to a published questionnaire version
+      parameters: [{$ref: '#/components/parameters/idempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssessmentCreate'}
+      responses:
+        '201': {description: Assessment created}
+        '403': {description: Tenant or role forbidden}
+    get:
+      tags: [Assessments]
+      summary: List only assessments visible to the caller's verified tenant and role
+      responses:
+        '200': {description: Tenant-scoped assessment listing}
+  /v1/assessments/{assessmentId}/questions:
+    get:
+      tags: [Assessments]
+      summary: Resolve deterministic branching for a scope and questionnaire version
+      parameters:
+        - {$ref: '#/components/parameters/assessmentId'}
+        - {in: query, name: scope_id, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Eligible question IDs and schema}
+  /v1/assessments/{assessmentId}/answers/{questionId}:
+    put:
+      tags: [Assessments]
+      summary: Optimistic-locking answer upsert; preserve revision history
+      parameters:
+        - {$ref: '#/components/parameters/assessmentId'}
+        - {$ref: '#/components/parameters/questionId'}
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScopedAnswer'}
+      responses:
+        '200': {description: Saved with new ETag}
+        '409': {description: Concurrent modification; refresh and merge}
+        '422': {description: Answer not valid for published schema or scope}
+  /v1/assessments/{assessmentId}/swaska/turns:
+    post:
+      tags: [Swaska]
+      summary: Suggest approved follow-up, not a binding governance conclusion
+      parameters: [{$ref: '#/components/parameters/assessmentId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SwaskaTurn'}
+      responses:
+        '200': {description: Structured allowed clarification}
+  /v1/assessments/{assessmentId}/evidence/upload-url:
+    post:
+      tags: [Evidence]
+      summary: Return short-lived upload URL after MIME/size/type precheck
+      parameters: [{$ref: '#/components/parameters/assessmentId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EvidenceUploadRequest'}
+      responses:
+        '201': {description: Upload grant; quarantine and scanning still required}
+  /v1/assessments/{assessmentId}/submit:
+    post:
+      tags: [Assessments]
+      summary: Freeze immutable answer/evidence manifest and start diagnosis
+      parameters:
+        - {$ref: '#/components/parameters/assessmentId'}
+        - {$ref: '#/components/parameters/idempotencyKey'}
+      responses:
+        '202': {description: Submitted; async analysis queued}
+        '409': {description: Conflicting state or missing mandatory answers}
+  /v1/assessments/{assessmentId}/findings:
+    get:
+      tags: [Findings]
+      parameters: [{$ref: '#/components/parameters/assessmentId'}]
+      responses:
+        '200': {description: Findings permitted by caller visibility/role}
+  /v1/assessments/{assessmentId}/reports:
+    get:
+      tags: [Reports]
+      parameters: [{$ref: '#/components/parameters/assessmentId'}]
+      responses:
+        '200': {description: Accessible versioned reports; draft visibility is role gated}
+  /v1/assessments/{assessmentId}/reviews/{reportId}/decision:
+    post:
+      tags: [Reviewer]
+      parameters:
+        - {$ref: '#/components/parameters/assessmentId'}
+        - {in: path, name: reportId, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/idempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewDecision'}
+      responses:
+        '200': {description: Review recorded and, when approved, publication queued}
+  /v1/assessments/{assessmentId}/poc-blueprints:
+    post:
+      tags: [Handoff]
+      parameters:
+        - {$ref: '#/components/parameters/assessmentId'}
+        - {$ref: '#/components/parameters/idempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/POCBlueprintRequest'}
+      responses:
+        '201': {description: Draft blueprint, never production activation}
+  /v1/admin/metrics:
+    get:
+      tags: [Admin]
+      summary: Restricted CloudSeals portfolio metrics with per-role aggregation
+      responses:
+        '200': {description: Registrations, assessments, progress, review queue, POC conversions}
+        '403': {description: Non-CloudSeals roles forbidden}
+  /v1/agentops:
+    get:
+      tags: [AgentOps]
+      summary: Tenant-scoped runtime status and bounded agent manifests
+      responses:
+        '200': {description: Runtime mode, agent versions and run counts}
+  /v1/workflows/{pack_id}/runs:
+    post:
+      tags: [TrustOps Core Runtime]
+      summary: Start LedgerSight AR/Cash sandbox workflow; fails closed outside local/dev sandbox
+      parameters:
+        - {in: path, name: pack_id, required: true, schema: {type: string}}
+        - {$ref: '#/components/parameters/idempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkflowRunRequest'}
+      responses:
+        '201': {description: Six-agent deterministic workflow run}
+        '409': {description: Duplicate receipt or conflict}
+        '503': {description: Runtime disabled}
+  /v1/runs/{run_id}:
+    get:
+      tags: [TrustOps Core Runtime]
+      parameters: [{in: path, name: run_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Tenant-scoped run state and agent trace}
+        '404': {description: Run not found}
+  /v1/approvals/{approval_id}/decision:
+    post:
+      tags: [TrustOps Core Runtime]
+      summary: Maker-checker approval; initiator cannot approve own action
+      parameters:
+        - {in: path, name: approval_id, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/idempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RuntimeApprovalDecision'}
+      responses:
+        '200': {description: Approval decision and evidence reference}
+        '403': {description: Role or maker-checker restriction}
+  /v1/execution/prepare:
+    post:
+      tags: [TrustOps Core Runtime]
+      summary: Policy-gated action preparation and evidence pre-commit
+      parameters: [{$ref: '#/components/parameters/idempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PrepareActionRequest'}
+      responses:
+        '200': {description: Prepared proposal and one-time short-lived action token}
+        '409': {description: Policy, approval or evidence gate not satisfied}
+  /v1/execution/execute:
+    post:
+      tags: [TrustOps Core Runtime]
+      summary: Mock SAP Execution Gateway; validates token, tenant, proposal digest and idempotency
+      parameters: [{$ref: '#/components/parameters/idempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExecuteActionRequest'}
+      responses:
+        '200': {description: Mock connector acknowledgement and evidence commit reference}
+        '403': {description: Invalid, expired, used, or mis-scoped token}
+  /v1/evidence/{run_id}/verify:
+    post:
+      tags: [TrustOps Core Runtime]
+      summary: Verify tenant-scoped local hash chain; does not claim KMS signature or WORM storage
+      parameters: [{in: path, name: run_id, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Evidence integrity result and records}

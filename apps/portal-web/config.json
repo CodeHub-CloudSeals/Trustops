@@ -1,0 +1,1 @@
+{"mode":"oidc","oidc":{"authorize_url":"","token_url":"","client_id":"","redirect_uri":"","logout_url":"","scope":"openid email"}}

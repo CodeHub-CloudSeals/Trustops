@@ -1,0 +1,498 @@
+{
+ "framework": {
+  "id": "fda_samd",
+  "name": "FDA AI/ML Software as Medical Device",
+  "short_name": "FDA AI/ML SaMD",
+  "version": "FDA AI/ML Action Plan 2021 + 2023 Draft Guidance",
+  "action_plan_date": "2021-01-12",
+  "draft_guidance_date": "2023-04-03",
+  "issuing_body": "U.S. Food and Drug Administration (FDA)",
+  "jurisdiction": "United States — Medical Device and Healthcare AI",
+  "description": "FDA's regulatory framework for AI and machine learning-based Software as a Medical Device. Addresses the unique challenges of AI/ML software that can learn and change through real-world use. Key concepts include Predetermined Change Control Plans (PCCPs), Algorithm Change Protocols (ACPs), Good Machine Learning Practice (GMLP), and Total Product Lifecycle (TPLC) oversight.",
+  "risk_tiers": [
+   "all"
+  ],
+  "applicable_to": [
+   "AI/ML-based SaMD",
+   "AI-enabled medical devices",
+   "Clinical decision support software",
+   "Diagnostic AI systems"
+  ],
+  "key_concepts": [
+   "PCCP",
+   "ACP",
+   "GMLP",
+   "TPLC",
+   "SaMD"
+  ]
+ },
+ "requirements": [
+  {
+   "id": "SaMD_1",
+   "title": "SaMD-1 — Predetermined Change Control Plan (PCCP)",
+   "text": "AI/ML-based SaMD sponsors shall develop and submit a Predetermined Change Control Plan (PCCP) that anticipates planned modifications to the AI/ML algorithm. The PCCP shall specify: the description of planned modifications; the methodology for implementing modifications; and the performance evaluation plan to assess the impact of modifications. A PCCP allows certain modifications without requiring a new marketing submission.",
+   "scope": "AI/ML-based SaMD seeking FDA clearance or approval",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Pre-Market",
+   "controls": [
+    {
+     "id": "SaMD_1.C1",
+     "description": "Develop a PCCP describing planned algorithm modifications, implementation methodology, and performance evaluation criteria",
+     "evidence_needed": [
+      "PCCP document",
+      "Modification description with scope boundaries",
+      "Performance evaluation plan"
+     ]
+    },
+    {
+     "id": "SaMD_1.C2",
+     "description": "Include PCCP in the marketing submission (510(k), De Novo, or PMA) and obtain FDA acceptance",
+     "evidence_needed": [
+      "Marketing submission including PCCP",
+      "FDA acceptance/clearance communication"
+     ]
+    },
+    {
+     "id": "SaMD_1.C3",
+     "description": "Establish a governance process to manage changes within and outside PCCP boundaries",
+     "evidence_needed": [
+      "PCCP governance procedure",
+      "Change classification criteria"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_2",
+   "title": "SaMD-2 — Algorithm Change Protocol (ACP)",
+   "text": "Sponsors shall establish an Algorithm Change Protocol specifying the conditions under which the AI/ML algorithm may be modified without requiring additional FDA submissions. The ACP shall define: types of performance data that will be collected; reference standard for evaluation; statistical approach; and update criteria (including retraining triggers).",
+   "scope": "AI/ML-based SaMD with continuous learning or periodic retraining capabilities",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Pre-Market",
+   "controls": [
+    {
+     "id": "SaMD_2.C1",
+     "description": "Develop an ACP defining update types, performance evaluation methodology, and update decision criteria",
+     "evidence_needed": [
+      "ACP document",
+      "Update type classification",
+      "Performance evaluation protocol"
+     ]
+    },
+    {
+     "id": "SaMD_2.C2",
+     "description": "Define locked vs. adaptive algorithm components and their respective change management requirements",
+     "evidence_needed": [
+      "Algorithm component inventory",
+      "Locked/adaptive classification",
+      "Respective governance procedures"
+     ]
+    },
+    {
+     "id": "SaMD_2.C3",
+     "description": "Establish retraining triggers and document criteria for when a new marketing submission is required",
+     "evidence_needed": [
+      "Retraining trigger criteria",
+      "Marketing submission threshold criteria"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_3",
+   "title": "SaMD-3 — Clinical Validation and Analytical Validation",
+   "text": "AI/ML-based SaMD requires both analytical and clinical validation before marketing. Analytical validation demonstrates the algorithm's technical performance (sensitivity, specificity, AUC, etc.). Clinical validation demonstrates that algorithm outputs translate to meaningful clinical outcomes in the intended patient population and clinical environment.",
+   "scope": "All AI/ML-based SaMD seeking marketing authorisation",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Clinical Validation",
+   "controls": [
+    {
+     "id": "SaMD_3.C1",
+     "description": "Conduct analytical validation measuring technical performance metrics against an appropriate reference standard",
+     "evidence_needed": [
+      "Analytical validation study report",
+      "Performance metrics",
+      "Reference standard justification"
+     ]
+    },
+    {
+     "id": "SaMD_3.C2",
+     "description": "Conduct clinical validation demonstrating clinical utility in the intended use population",
+     "evidence_needed": [
+      "Clinical validation study protocol",
+      "Clinical study report",
+      "Clinical utility evidence"
+     ]
+    },
+    {
+     "id": "SaMD_3.C3",
+     "description": "Validate performance across clinically relevant subgroups including demographic, disease severity, and site diversity",
+     "evidence_needed": [
+      "Subgroup analysis results",
+      "Demographic representation analysis"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_4",
+   "title": "SaMD-4 — Training, Tuning, and Test Dataset Documentation",
+   "text": "Sponsors shall document the training, tuning, and test datasets used for AI/ML SaMD development. Documentation shall include: data sources; collection methodology; inclusion/exclusion criteria; patient demographics; data preprocessing steps; and dataset splits. Independent test sets shall not be used during training or tuning.",
+   "scope": "All AI/ML-based SaMD",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Clinical Validation",
+   "controls": [
+    {
+     "id": "SaMD_4.C1",
+     "description": "Produce comprehensive dataset documentation covering training, tuning, and test sets",
+     "evidence_needed": [
+      "Dataset documentation",
+      "Data dictionary",
+      "Demographic summary statistics"
+     ]
+    },
+    {
+     "id": "SaMD_4.C2",
+     "description": "Demonstrate independence of test dataset from training and tuning processes",
+     "evidence_needed": [
+      "Dataset split documentation",
+      "Data independence attestation"
+     ]
+    },
+    {
+     "id": "SaMD_4.C3",
+     "description": "Document data preprocessing pipeline and version-controlled transformations",
+     "evidence_needed": [
+      "Preprocessing pipeline documentation",
+      "Version control records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_5",
+   "title": "SaMD-5 — Good Machine Learning Practice (GMLP)",
+   "text": "AI/ML SaMD development shall comply with Good Machine Learning Practice principles jointly issued by FDA, Health Canada, and MHRA. GMLP principles include: multidisciplinary teams; training/test data independence; reference standard justification; clinical study design; model performance assessment; transparency and reproducibility; and robust data practices.",
+   "scope": "All AI/ML-based SaMD developers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Clinical Validation",
+   "controls": [
+    {
+     "id": "SaMD_5.C1",
+     "description": "Document compliance with each of the 10 GMLP principles in the development record",
+     "evidence_needed": [
+      "GMLP compliance checklist",
+      "Evidence for each principle"
+     ]
+    },
+    {
+     "id": "SaMD_5.C2",
+     "description": "Ensure multidisciplinary team composition covering AI/ML expertise, clinical expertise, and relevant regulatory expertise",
+     "evidence_needed": [
+      "Team composition documentation",
+      "Role and qualification records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_6",
+   "title": "SaMD-6 — Transparency and Labelling",
+   "text": "AI/ML SaMD labelling shall provide transparency about the algorithm including: intended use and indications for use; performance characteristics; known limitations and failure modes; input data requirements; and clinical workflow integration guidance. Labelling shall enable informed clinical use.",
+   "scope": "All AI/ML-based SaMD",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Clinical Validation",
+   "controls": [
+    {
+     "id": "SaMD_6.C1",
+     "description": "Develop labelling that clearly discloses AI/ML algorithm characteristics, performance, and limitations",
+     "evidence_needed": [
+      "Labelling documents",
+      "Instructions for use",
+      "Performance disclosure"
+     ]
+    },
+    {
+     "id": "SaMD_6.C2",
+     "description": "Disclose training data characteristics relevant to intended clinical use populations",
+     "evidence_needed": [
+      "Training data summary in labelling",
+      "Population representation disclosure"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_7",
+   "title": "SaMD-7 — Real-World Performance Monitoring Plan",
+   "text": "Sponsors shall develop and implement a real-world performance monitoring plan for AI/ML SaMD. The plan shall specify: performance metrics to be monitored; data collection methodology; reference standard for ongoing comparison; monitoring frequency; and performance thresholds that trigger corrective action.",
+   "scope": "All marketed AI/ML-based SaMD",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Post-Market",
+   "controls": [
+    {
+     "id": "SaMD_7.C1",
+     "description": "Develop and implement a real-world performance monitoring plan submitted as part of PCCP",
+     "evidence_needed": [
+      "Real-world performance monitoring plan",
+      "Monitoring implementation evidence"
+     ]
+    },
+    {
+     "id": "SaMD_7.C2",
+     "description": "Collect and analyse real-world performance data at defined intervals",
+     "evidence_needed": [
+      "Real-world performance reports",
+      "Data collection records"
+     ]
+    },
+    {
+     "id": "SaMD_7.C3",
+     "description": "Define and monitor performance thresholds that trigger PCCP review or regulatory reporting",
+     "evidence_needed": [
+      "Threshold definitions",
+      "Threshold monitoring records"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_8",
+   "title": "SaMD-8 — Medical Device Reporting (MDR) for AI Failures",
+   "text": "Sponsors shall comply with Medical Device Reporting (MDR) requirements for AI/ML SaMD malfunctions or failures that cause or could cause serious injury. Reportable events include: significant unexpected performance degradation; algorithm outputs contributing to clinical adverse events; and cybersecurity incidents affecting AI/ML system integrity.",
+   "scope": "All marketed AI/ML-based SaMD",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Post-Market",
+   "controls": [
+    {
+     "id": "SaMD_8.C1",
+     "description": "Establish MDR processes covering AI/ML-specific failure modes and reporting criteria",
+     "evidence_needed": [
+      "MDR procedure",
+      "AI/ML-specific reporting criteria",
+      "MDR submission records"
+     ]
+    },
+    {
+     "id": "SaMD_8.C2",
+     "description": "Implement AI/ML failure detection systems to identify reportable events",
+     "evidence_needed": [
+      "Failure detection system documentation",
+      "Alert configuration"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_9",
+   "title": "SaMD-9 — Post-Market Surveillance for AI/ML SaMD",
+   "text": "Sponsors shall conduct proactive post-market surveillance for AI/ML SaMD including: collection of real-world clinical outcome data; monitoring for distribution shift in input data; assessment of performance across deployment sites and patient subgroups; and evaluation of clinical workflow integration effects on algorithm performance.",
+   "scope": "All marketed AI/ML-based SaMD",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Post-Market",
+   "controls": [
+    {
+     "id": "SaMD_9.C1",
+     "description": "Implement proactive post-market surveillance programme covering real-world performance and clinical outcomes",
+     "evidence_needed": [
+      "Post-market surveillance plan",
+      "Surveillance reports"
+     ]
+    },
+    {
+     "id": "SaMD_9.C2",
+     "description": "Monitor for data distribution shift at deployment sites",
+     "evidence_needed": [
+      "Distribution shift monitoring methodology",
+      "Site-level performance reports"
+     ]
+    },
+    {
+     "id": "SaMD_9.C3",
+     "description": "Evaluate clinical workflow integration and its effects on algorithm use and performance",
+     "evidence_needed": [
+      "Workflow integration assessment",
+      "Human factors evaluation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_10",
+   "title": "SaMD-10 — PCCP Updates and Regulatory Notifications",
+   "text": "Sponsors shall update the PCCP when modifications fall outside the approved PCCP boundaries or when significant changes are made to the performance evaluation plan. Changes requiring a new marketing submission shall be identified and submitted appropriately. FDA shall be notified of significant post-market findings.",
+   "scope": "All marketed AI/ML-based SaMD with approved PCCPs",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Post-Market",
+   "controls": [
+    {
+     "id": "SaMD_10.C1",
+     "description": "Establish a PCCP update process with criteria for when updates require FDA notification",
+     "evidence_needed": [
+      "PCCP update procedure",
+      "Change classification records"
+     ]
+    },
+    {
+     "id": "SaMD_10.C2",
+     "description": "Document and submit all required regulatory notifications for out-of-PCCP modifications",
+     "evidence_needed": [
+      "Regulatory notification submissions",
+      "Change-to-submission mapping"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_11",
+   "title": "SaMD-11 — Quality Management System for AI/ML SaMD",
+   "text": "AI/ML SaMD development and post-market activities shall be conducted within a quality management system compliant with 21 CFR Part 820 (QSR) or ISO 13485. The QMS shall encompass AI/ML-specific processes including: training data management; model configuration management; algorithm change controls; and post-market performance management.",
+   "scope": "All AI/ML SaMD manufacturers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Quality System",
+   "controls": [
+    {
+     "id": "SaMD_11.C1",
+     "description": "Maintain a QMS (21 CFR Part 820 / ISO 13485 compliant) with AI/ML-specific procedures",
+     "evidence_needed": [
+      "QMS documentation",
+      "AI/ML procedures",
+      "Quality manual"
+     ]
+    },
+    {
+     "id": "SaMD_11.C2",
+     "description": "Include AI/ML training data management, model versioning, and algorithm change control in the QMS",
+     "evidence_needed": [
+      "Training data management procedure",
+      "Model configuration management procedure",
+      "Algorithm change control SOP"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_12",
+   "title": "SaMD-12 — Software Lifecycle (IEC 62304 Compliance)",
+   "text": "AI/ML SaMD software shall be developed in compliance with IEC 62304 (Medical Device Software Lifecycle). AI/ML software shall be assigned a software safety class (A, B, or C) and appropriate lifecycle activities applied. ML training code, model artefacts, and inference code shall all be managed under the IEC 62304 software configuration management process.",
+   "scope": "All AI/ML SaMD manufacturers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Quality System",
+   "controls": [
+    {
+     "id": "SaMD_12.C1",
+     "description": "Classify AI/ML software under IEC 62304 safety classes and apply proportionate lifecycle controls",
+     "evidence_needed": [
+      "Software safety class assignment",
+      "IEC 62304 compliance evidence"
+     ]
+    },
+    {
+     "id": "SaMD_12.C2",
+     "description": "Apply configuration management to ML training code, model artefacts, and inference pipeline",
+     "evidence_needed": [
+      "Software configuration management records",
+      "Version control evidence for all AI/ML components"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_13",
+   "title": "SaMD-13 — Risk Management (ISO 14971)",
+   "text": "Risk management for AI/ML SaMD shall comply with ISO 14971. Risk analysis shall address AI/ML-specific failure modes including: incorrect algorithm outputs; distribution shift; adversarial inputs; and human-AI interaction failures. Risk management shall be a living process updated with post-market experience.",
+   "scope": "All AI/ML SaMD manufacturers",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Quality System",
+   "controls": [
+    {
+     "id": "SaMD_13.C1",
+     "description": "Conduct ISO 14971 risk analysis for AI/ML SaMD with AI-specific failure modes",
+     "evidence_needed": [
+      "Risk management file",
+      "AI-specific FMEA or hazard analysis",
+      "Risk benefit analysis"
+     ]
+    },
+    {
+     "id": "SaMD_13.C2",
+     "description": "Update risk management file with post-market experience and real-world performance data",
+     "evidence_needed": [
+      "Risk file update records",
+      "Post-market risk review minutes"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "SaMD_14",
+   "title": "SaMD-14 — Cybersecurity for AI/ML SaMD",
+   "text": "AI/ML SaMD shall address cybersecurity risks including AI-specific threats: adversarial attacks on inference; training data poisoning; model theft; and manipulation of connected data sources. Cybersecurity activities shall comply with FDA's Cybersecurity Guidance for Medical Devices and the NIST Cybersecurity Framework.",
+   "scope": "All AI/ML SaMD with network connectivity or data interfaces",
+   "risk_tiers_applicable": [
+    "all"
+   ],
+   "phase": "Quality System",
+   "controls": [
+    {
+     "id": "SaMD_14.C1",
+     "description": "Conduct AI-specific cybersecurity risk assessment covering adversarial attacks, data poisoning, and model integrity",
+     "evidence_needed": [
+      "AI cybersecurity risk assessment",
+      "Threat model"
+     ]
+    },
+    {
+     "id": "SaMD_14.C2",
+     "description": "Implement and test security controls for AI/ML SaMD inputs, outputs, and model artefacts",
+     "evidence_needed": [
+      "Security control implementation evidence",
+      "Penetration test results",
+      "Adversarial testing report"
+     ]
+    },
+    {
+     "id": "SaMD_14.C3",
+     "description": "Establish a post-market cybersecurity monitoring and vulnerability management programme",
+     "evidence_needed": [
+      "Cybersecurity monitoring programme",
+      "Vulnerability management procedure",
+      "Patch records"
+     ]
+    }
+   ]
+  }
+ ],
+ "provenance": {
+  "source": "cs-trustops-studio/trustops-gap-analysis-agent frameworks/fda_samd",
+  "imported": "2026-10-11",
+  "review_status": "PENDING_LEGAL_REVIEW",
+  "notice": "CloudSeals working interpretation for candidate gap analysis. Not legal advice and not a determination of regulatory applicability."
+ }
+}

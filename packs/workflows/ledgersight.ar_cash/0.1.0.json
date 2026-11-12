@@ -1,0 +1,25 @@
+{
+  "workflow_id": "ledgersight.ar_cash",
+  "version": "0.1.0",
+  "status": "SANDBOX_ONLY",
+  "connector": "mock_sap",
+  "policy": {
+    "id": "ledgersight.ar_cash.default",
+    "version": "0.1.0",
+    "matching": "EXACT_REFERENCE_AMOUNT_CURRENCY_ONLY",
+    "high_value_threshold_minor": 100000,
+    "high_value_threshold_note": "Illustrative 1,000.00 threshold for a two-decimal currency; replace with customer-approved currency-aware limits before UAT."
+  },
+  "agents": [
+    {"id": "ledgersight.intake", "version": "0.1.0", "purpose": "Validate and fingerprint source data", "authority": ["READ", "CLASSIFY"]},
+    {"id": "ledgersight.match", "version": "0.1.0", "purpose": "Identify deterministic invoice candidates", "authority": ["READ", "RECOMMEND"]},
+    {"id": "ledgersight.reconciliation", "version": "0.1.0", "purpose": "Explain amount and reference residuals", "authority": ["READ", "RECOMMEND"]},
+    {"id": "ledgersight.cash_allocation", "version": "0.1.0", "purpose": "Recommend a bounded allocation proposal", "authority": ["READ", "RECOMMEND"]},
+    {"id": "ledgersight.exception", "version": "0.1.0", "purpose": "Route unresolved or unsafe cases", "authority": ["READ", "CLASSIFY", "RECOMMEND"]},
+    {"id": "ledgersight.audit", "version": "0.1.0", "purpose": "Assemble evidence references", "authority": ["READ"]}
+  ],
+  "global_prohibitions": ["APPROVE", "EXECUTE", "ISSUE_ACTION_TOKEN", "ACCESS_OTHER_TENANT", "HOLD_CONNECTOR_CREDENTIALS"],
+  "worker_network_access": false,
+  "model_route": "optional_bedrock_converse",
+  "reasoning_contract": "Six structured recommendations; deterministic policy remains authoritative and the model cannot approve, execute, access tools, or issue credentials."
+}

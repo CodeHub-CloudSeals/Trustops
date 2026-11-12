@@ -1,0 +1,110 @@
+# Cloud Build: test -> build -> push to Artifact Registry -> deploy to Cloud Run.
+# Run through infra/gcp/setup.sh (provisions everything first) or directly:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions _OIDC_ISSUER=...,_BUCKET=...
+substitutions:
+  _REGION: europe-west1
+  _REPO: taad
+  _SERVICE: taad-api
+  _ENV: dev                      # dev enables the sandbox workflow runtime and first-admin bootstrap; prod disables both
+  _RUNTIME_SA: taad-run
+  _STATE_BUCKET: ""              # application state snapshot bucket
+  _BUCKET: ""                    # evidence bucket
+  _AUTH_PROVIDER: google         # google | oidc
+  _GOOGLE_CLIENT_ID: ""
+  _GOOGLE_SECRET: ""             # Secret Manager secret holding the OAuth client secret
+  _STAFF_EMAIL_DOMAINS: ""       # ";"-separated email domains allowed to hold CloudSeals roles
+  _FIRST_ADMIN_EMAIL: ""         # verified Google email that becomes the first CloudSeals admin (dev env only, one time)
+  _OIDC_ISSUER: ""               # generic OIDC only
+  _OIDC_JWKS_URL: ""
+  _OIDC_AUDIENCE: ""
+  _PORTAL_AUTHORIZE_URL: ""
+  _PORTAL_TOKEN_URL: ""
+  _PORTAL_LOGOUT_URL: ""
+  _PORTAL_CLIENT_ID: ""
+  _PORTAL_REDIRECT_URI: ""       # https://<service>-<project-number>.<region>.run.app/portal/
+  _LLM_PROVIDER: vertex          # vertex | "" (deterministic agents only)
+  _VERTEX_MODEL: gemini-2.5-flash
+  _VERTEX_LOCATION: europe-west1
+  _CLAMAV: "false"               # "true" adds a ClamAV sidecar and scans every upload (needs 4 GiB / 2 vCPU per instance)
+  _CLAMAV_IMAGE: clamav/clamav:1.4
+  _KMS_KEY_VERSION: ""           # projects/.../cryptoKeyVersions/1 ; empty = local hash chain only
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s
+steps:
+  - id: test
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        pip install -q -r requirements-dev.txt
+        PYTHONPATH=packages/question-engine:packages/reporting:apps/assessment-api:. python -m pytest -q --ignore=tests/browser
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: [build, -t, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${BUILD_ID}", -t, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest", .]
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api"]
+  - id: mirror-clamav
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "${_CLAMAV}" = "true" ]; then
+          docker pull ${_CLAMAV_IMAGE}
+          docker tag ${_CLAMAV_IMAGE} ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/clamav:latest
+          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/clamav:latest
+        fi
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${BUILD_ID}
+        ENVS="^|^TAAD_ENV=${_ENV}|TAAD_AUTH_MODE=oidc|TAAD_AUTH_PROVIDER=${_AUTH_PROVIDER}|TAAD_OBJECT_BACKEND=gcs|TAAD_BUCKET_EVID=${_BUCKET}|TAAD_STATE_GCS_URI=gs://${_STATE_BUCKET}/state.json|GOOGLE_CLOUD_PROJECT=$PROJECT_ID|TAAD_GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID}|TAAD_FIRST_ADMIN_EMAIL=${_FIRST_ADMIN_EMAIL}|TAAD_STAFF_EMAIL_DOMAINS=${_STAFF_EMAIL_DOMAINS}|TAAD_OIDC_ISSUER=${_OIDC_ISSUER}|TAAD_OIDC_JWKS_URL=${_OIDC_JWKS_URL}|TAAD_OIDC_AUDIENCE=${_OIDC_AUDIENCE}|TAAD_PORTAL_AUTHORIZE_URL=${_PORTAL_AUTHORIZE_URL}|TAAD_PORTAL_TOKEN_URL=${_PORTAL_TOKEN_URL}|TAAD_PORTAL_LOGOUT_URL=${_PORTAL_LOGOUT_URL}|TAAD_PORTAL_CLIENT_ID=${_PORTAL_CLIENT_ID}|TAAD_PORTAL_REDIRECT_URI=${_PORTAL_REDIRECT_URI}|TAAD_LLM_PROVIDER=${_LLM_PROVIDER}|TAAD_VERTEX_MODEL=${_VERTEX_MODEL}|TAAD_VERTEX_LOCATION=${_VERTEX_LOCATION}|TAAD_KMS_SIGNING_KEY_VERSION=${_KMS_KEY_VERSION}"
+        SECRETS=""
+        [ -n "${_GOOGLE_SECRET}" ] && SECRETS="TAAD_GOOGLE_CLIENT_SECRET=${_GOOGLE_SECRET}:latest"
+        # The API keeps its state as a single-writer snapshot and its rate limiter in memory: exactly one instance.
+        # Authentication is enforced by the app (Google ID token on every API call), so the service itself is publicly reachable.
+        ARGS=(run deploy ${_SERVICE} --region=${_REGION} --service-account=${_RUNTIME_SA}@$PROJECT_ID.iam.gserviceaccount.com
+              --min-instances=1 --max-instances=1 --concurrency=40 --timeout=300 --allow-unauthenticated)
+        if [ "${_CLAMAV}" = "true" ]; then
+          # Multi-container service (app + ClamAV sidecar): written as a full service spec so exactly one container exposes a port.
+          export ENVS SECRETS IMAGE
+          python3 - > /workspace/service.json <<'PY'
+        import json, os
+        env = [dict(zip(("name", "value"), kv.split("=", 1))) for kv in os.environ["ENVS"][3:].split("|") if kv] + [{"name": "TAAD_CLAMD_HOST", "value": "127.0.0.1"}]
+        secrets = [{"name": kv.split("=", 1)[0], "valueFrom": {"secretKeyRef": {"name": kv.split("=", 1)[1].rsplit(":", 1)[0], "key": "latest"}}} for kv in os.environ["SECRETS"].split(",") if kv]
+        spec = {"apiVersion": "serving.knative.dev/v1", "kind": "Service",
+                "metadata": {"name": "${_SERVICE}", "annotations": {"run.googleapis.com/ingress": "all"}},
+                "spec": {"template": {"metadata": {"annotations": {
+                    "autoscaling.knative.dev/minScale": "1", "autoscaling.knative.dev/maxScale": "1",
+                    "run.googleapis.com/startup-cpu-boost": "true", "run.googleapis.com/container-dependencies": json.dumps({"app": ["clamav"]})}},
+                    "spec": {"serviceAccountName": "${_RUNTIME_SA}@$PROJECT_ID.iam.gserviceaccount.com", "containerConcurrency": 40, "timeoutSeconds": 300, "containers": [
+                        {"name": "app", "image": os.environ["IMAGE"], "ports": [{"containerPort": 8080}], "env": env + secrets, "resources": {"limits": {"cpu": "1", "memory": "1Gi"}}},
+                        {"name": "clamav", "image": "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/clamav:latest", "resources": {"limits": {"cpu": "1", "memory": "3Gi"}},
+                         "startupProbe": {"tcpSocket": {"port": 3310}, "timeoutSeconds": 5, "periodSeconds": 10, "failureThreshold": 60}}]}}}}
+        print(json.dumps(spec))
+        PY
+          gcloud run services replace /workspace/service.json --region=${_REGION}
+          exit 0
+        fi
+        ARGS+=(--image=$$IMAGE --cpu=1 --memory=1Gi --set-env-vars="$$ENVS")
+        [ -n "$$SECRETS" ] && ARGS+=(--set-secrets="$$SECRETS")
+        gcloud "$${ARGS[@]}"
+  - id: smoke
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        URL=$$(gcloud run services describe ${_SERVICE} --region=${_REGION} --format='value(status.url)')
+        for i in 1 2 3 4 5 6; do curl -fsS "$$URL/health" && echo && exit 0; sleep 5; done
+        echo "health check failed at $$URL" >&2; exit 1
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:${BUILD_ID}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/api:latest
