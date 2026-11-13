@@ -359,3 +359,13 @@ def test_assign_review_to_a_named_approver(env, public_dns):
     assert len(rec["assignment"]["history"]) == 2
     assert c.get("/v1/decisions-verify", headers=h("admin@t-bank")).json()["valid"]
     assert {r["email"] for r in c.get("/v1/decisions-reviewers", headers=h("risk@t-bank")).json()["items"]} == emails
+
+
+def test_rename_application_keeps_its_key(env, public_dns):
+    c, h = env
+    app = c.post("/v1/integrations", headers=h("admin@t-bank"), json={"name": "Ledgerisight"}).json()
+    assert c.patch(f"/v1/integrations/{app['id']}", headers=h("controller@t-bank"), json={"name": "LedgerSight"}).status_code == 403
+    assert c.patch(f"/v1/integrations/{app['id']}", headers=h("admin@t-bank"), json={"name": ""}).status_code == 422
+    assert c.patch(f"/v1/integrations/{app['id']}", headers=h("admin@t-bank"), json={"name": "LedgerSight"}).json()["name"] == "LedgerSight"
+    r = ask(c, app["trustops_key"], action="submit_for_review", actor_type="human", actor_id="p@x").json()
+    assert c.get(f"/v1/decisions/{r['decision_id']}", headers=h("admin@t-bank")).json()["application"]["name"] == "LedgerSight"

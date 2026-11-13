@@ -108,6 +108,10 @@ export function registerTrustBoundary({ routes, main, el, api }) {
       el("td", {}, pill(...TONE[it.status]), el("p", {}, it.last_result || ""), it.base_url ? el("p", {}, `Last test: ${when(it.last_tested_at)}`) : ""),
       el("td", {}, list.can_manage ? el("div", { class: "gov-actions" },
         el("button", { class: "gov-button gov-secondary", type: "button", onclick: async () => {
+          const n = prompt("New name for this application:", it.name);
+          if (n === null || !n.trim() || n.trim() === it.name) return;
+          try { await send(`${INT}/${it.id}`, "PATCH", { name: n.trim() }); await routes["connected-systems"](); } catch (e) { say(e.message, false); } } }, "Rename"),
+        el("button", { class: "gov-button gov-secondary", type: "button", onclick: async () => {
           const u = prompt(`Address of ${it.name} (https://…). Needed only so TrustOps can load review details. Leave empty to remove.`, it.base_url || "");
           if (u === null) return;
           try { await send(`${INT}/${it.id}`, "PATCH", { base_url: u }); await routes["connected-systems"](); } catch (e) { say(e.message, false); } } }, it.base_url ? "Change address" : "Set address"),

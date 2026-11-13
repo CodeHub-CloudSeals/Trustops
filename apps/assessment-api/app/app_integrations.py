@@ -253,6 +253,11 @@ def make_router(principal, audit=None, identity=None, store=None, transport=None
         rec, secret = db.get(p.tenant_id, iid)
         if not rec:
             raise _err("not_found", 404, "Integration not found")
+        if "name" in body:
+            name = str(body.get("name") or "").strip()
+            if not 1 <= len(name) <= 80:
+                raise _err("invalid_request", 422, "Name must be 1 to 80 characters")
+            rec["name"] = name
         if "base_url" in body:
             raw = str(body.get("base_url") or "").strip()
             rec["base_url"] = _check_url(raw, allow_private) if raw else None
