@@ -227,7 +227,7 @@ async function render() {
     const pth = document.createElementNS(svg.namespaceURI, "path"); pth.setAttribute("d", d); svg.append(pth); return svg; };
   who.replaceChildren(
     el("span", { class: "role-pill", title: person }, el("span", { class: "role-dot", "aria-hidden": "true" }),
-      el("span", { class: "role-k" }, "Signed in as"), el("b", {}, state.cfg.mode === "dev" ? roleName : person)),
+      el("span", { class: "role-k" }, "Signed in as"), el("b", {}, roleName)),   // role only, like LedgerSight; the email shows on hover
     notify.element(),
     state.cfg.mode === "dev" ? "" : el("button", { class: "iconbtn", type: "button", onclick: logout, "aria-label": "Sign out", title: "Sign out" },
       topIco("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3")),
