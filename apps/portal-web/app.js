@@ -112,8 +112,24 @@ async function loginView() {
   }
   document.body.classList.add("login-page");
   const point = (t) => el("li", {}, t);
-  const visual = el("section", { class: "lg-visual lg-hero" },
-    el("img", { src: "images/login-hero.jpg", alt: "Every AI action, governed: AI proposes, TrustOps checks policy, authority and limits, then allows, sends to human review or denies, and records the evidence." }));
+  const step = (n, t, d) => el("li", {}, el("b", {}, n), el("div", {}, el("strong", {}, t), el("span", {}, d)));
+  const visual = el("section", { class: "lg-visual lg-light" },
+    el("div", { class: "lgl-brand" }, el("img", { src: "images/logo.svg", alt: "" }), el("span", {}, "CloudSeals")),
+    el("div", { class: "lgl-copy" },
+      el("span", { class: "lgl-eyebrow" }, "TrustOps · AI governance"),
+      el("h2", {}, "Every AI action.", el("br"), el("em", {}, "Checked before it happens.")),
+      el("p", {}, "Your applications ask TrustOps before they act. Routine work goes through, risky work waits for the right person, and every decision is kept as evidence.")),
+    el("div", { class: "lgl-stage", "aria-hidden": "true" },
+      el("div", { class: "lgl-card" },
+        el("div", { class: "lgl-row" }, el("span", { class: "lgl-app" }, "LedgerSight"), el("span", { class: "lgl-pill esc" }, "Waiting for approval")),
+        el("strong", { class: "lgl-title" }, "Partial receipt · $3,000.00"),
+        el("span", { class: "lgl-muted" }, "Invoice INV-2104 open $5,000.00 · $2,000.00 still owed"),
+        el("div", { class: "lgl-meta" }, el("span", {}, "Rule FIN-00"), el("span", {}, "Reviewer: Approver")),
+        el("div", { class: "lgl-actions" }, el("span", { class: "lgl-btn" }, "Approve"), el("span", { class: "lgl-btn ghost" }, "Reject"))),
+      el("ul", { class: "lgl-steps" },
+        step("1", "Ask", "The application sends the action"),
+        step("2", "Decide", "Allow, send for review, or deny"),
+        step("3", "Prove", "Each decision is hash-chained"))));
   const card = el("section", { class: "lg-card" },
     el("img", { src: "images/logo.svg", alt: "", class: "lg-logo" }),
     el("span", { class: "lg-eyebrow dark" }, "TrustOps"),
