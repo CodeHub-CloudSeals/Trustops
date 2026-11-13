@@ -1,6 +1,6 @@
 import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13c";
 import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13n";
-import { registerApplications } from "./applications.js?v=access-2026-11-13d";
+import { registerApplications } from "./applications.js?v=access-2026-11-13e";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);
 const main = $("#main"), nav = $("#nav"), who = $("#who"), contextBar = $("#contextBar");
@@ -222,7 +222,7 @@ async function render() {
     : el("span", { class: "who-email" }, state.me.email || state.me.sub), state.cfg.mode === "dev" ? "" : el("button", { class: "secondary", onclick: logout }, "Sign out"));
   contextBar.replaceChildren(
     el("div", { class: "workspace-breadcrumb" }, el("span", {}, "Workspace"), el("span", { "aria-hidden": "true" }, "/"), el("strong", {}, ({dashboard:"Overview",assessments:"Assessments",assessment:"Assessment", "agent-flow":"Assessment process",trustops:"Overview",agents:"Assessment team",reports:"Reports",demo:"Demo Studio", "ledger-sight":"LedgerSight POC"})[name] || name.replaceAll("-", " "))),
-    el("div", { class: "workspace-context-actions" }, state.cfg.mode !== "dev" ? el("span", { class: "workspace-session" }, "Secure session") : "", el("span", { class: "workspace-avatar", "aria-hidden": "true" }, tenantLabel(state.me.tenant).slice(0,1))));
+    el("div", { class: "workspace-context-actions" }));
   contextBar.scrollLeft = 0;
   // Pages that only CloudSeals staff (or specific staff roles) may use: show a clear message instead of an empty shell.
   const CASE_ROLES = ["cloudseals_admin", "cloudseals_assessor", "cloudseals_reviewer"], AUDIT = ["cloudseals_admin", "cloudseals_platform_ops", "auditor_readonly"];

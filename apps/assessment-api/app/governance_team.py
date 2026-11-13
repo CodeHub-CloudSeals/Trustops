@@ -48,9 +48,18 @@ def make_team_router(principal, store, persist=None, list_apps=None):
         if not p.tenant_id or "customer_admin" not in p.roles:
             raise HTTPException(403, "A customer administrator must manage team access")
 
+    org = os.environ.get("TRUSTOPS_ORG_TENANT", "t-cloudseals")
+
+    def is_staff(p, u):
+        """CloudSeals administrators act as administrators of the CloudSeals workspace (see console_principal)."""
+        return p.tenant_id == org and u.get("tenant_id") is None and "cloudseals_admin" in u.get("roles", [])
+
+    def roles_here(p, u):
+        return ["customer_admin"] if is_staff(p, u) else u.get("roles", [])
+
     def tenant_user(p, sub):
         user = store.users.get(sub)
-        if not user or user.get("tenant_id") != p.tenant_id:
+        if not user or (user.get("tenant_id") != p.tenant_id and not is_staff(p, user)):
             raise HTTPException(404, "Team member not found")
         return user
 
@@ -74,8 +83,8 @@ def make_team_router(principal, store, persist=None, list_apps=None):
 
     def preserve_admin(p, sub, new_roles):
         user = tenant_user(p, sub)
-        admins = sum(u.get("tenant_id") == p.tenant_id and "customer_admin" in u.get("roles", []) for u in store.users.values())
-        if "customer_admin" in user["roles"] and "customer_admin" not in new_roles and admins <= 1:
+        admins = sum((u.get("tenant_id") == p.tenant_id or is_staff(p, u)) and "customer_admin" in roles_here(p, u) for u in store.users.values())
+        if "customer_admin" in roles_here(p, user) and "customer_admin" not in new_roles and admins <= 1:
             raise HTTPException(409, "Keep at least one active customer administrator")
 
     def public(sub, u):
@@ -89,7 +98,7 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             members = [public(sub, u) for sub, u in store.users.items() if u.get("tenant_id") == p.tenant_id]
             if p.tenant_id == os.environ.get("TRUSTOPS_ORG_TENANT", "t-cloudseals"):
                 # CloudSeals administrators act as this workspace's administrators; their platform role is managed elsewhere.
-                members += [{**public(sub, u), "roles": ["customer_admin"], "role_labels": ["Admin (CloudSeals administrator)"], "staff": True}
+                members += [{**public(sub, u), "roles": ["customer_admin"], "role_labels": ["Admin"]}
                             for sub, u in store.users.items() if u.get("tenant_id") is None and "cloudseals_admin" in u.get("roles", [])]
             return {"members": members,
                     "applications": [{"id": a["id"], "name": a["name"]} for a in (list_apps(p.tenant_id) if list_apps else [])],
@@ -185,7 +194,7 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             checked_revision(user, body.revision)
             preserve_admin(p, sub, ROLE_MAP[body.role])
             old = copy.deepcopy(user)
-            user.update(roles=list(ROLE_MAP[body.role]), membership_revision=body.revision + 1)
+            user.update(roles=list(ROLE_MAP[body.role]), membership_revision=body.revision + 1, tenant_id=p.tenant_id)
             if body.app_access is not None:
                 user["app_access"] = valid_access(p, body.app_access)
             event(p, "governance.team.role_changed", sub)

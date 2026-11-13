@@ -107,3 +107,25 @@ class TeamTests(unittest.TestCase):
 
 
 if __name__=="__main__":unittest.main()
+
+
+def test_cloudseals_admins_can_be_changed_and_removed_in_cloudseals_workspace(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.governance_team import make_team_router
+    from app.main import STORE, Principal
+    STORE.users.clear()
+    STORE.users.update({"a": {"tenant_id": None, "roles": ["cloudseals_admin"], "email": "a@cs.com"},
+                        "b": {"tenant_id": None, "roles": ["cloudseals_admin"], "email": "b@cs.com"}})
+    me = Principal(sub="a", tenant_id="t-cloudseals", roles=["cloudseals_admin", "customer_admin"])
+    app = FastAPI(); app.include_router(make_team_router(lambda: me, STORE))
+    c = TestClient(app)
+    listed = {m["sub"]: m for m in c.get("/v1/governance/team").json()["members"]}
+    assert listed["b"]["role_labels"] == ["Admin"]
+    assert c.put("/v1/governance/team/members/b/role", json={"revision": 0, "role": "approver"}).status_code == 200
+    assert STORE.users["b"]["tenant_id"] == "t-cloudseals" and STORE.users["b"]["roles"] == ["customer_controller"]
+    assert c.post("/v1/governance/team/members/a/revoke", json={"revision": 0}).status_code == 409   # not yourself
+    assert c.post("/v1/governance/team/members/b/revoke", json={"revision": 1}).status_code == 200
+    assert "b" not in STORE.users
+    # the last administrator cannot be demoted
+    assert c.put("/v1/governance/team/members/a/role", json={"revision": 0, "role": "viewer"}).status_code == 409
