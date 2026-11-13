@@ -27,6 +27,7 @@ class Invite(BaseModel):
     email: str = Field(max_length=200)
     role: Literal["admin", "approver", "viewer", "none", "submitter", "reviewer"] = "viewer"
     app_access: dict[str, Literal["preparer", "reviewer"]] = Field(default_factory=dict)
+    apps: list[str] | None = None      # applications this person may use; their role there follows the TrustOps role
 
 
 class RoleChange(BaseModel):
@@ -34,6 +35,7 @@ class RoleChange(BaseModel):
     role: Literal["admin", "approver", "viewer", "none", "submitter", "reviewer"]
     revision: int = Field(ge=0)
     app_access: dict[str, Literal["preparer", "reviewer"]] | None = None
+    apps: list[str] | None = None
 
 
 class Revision(BaseModel):
@@ -77,6 +79,14 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             raise HTTPException(422, "Unknown application in access list")
         return {k: v for k, v in (access or {}).items()}
 
+    def valid_apps(p, ids):
+        if ids is None:
+            return None
+        known = {a["id"] for a in (list_apps(p.tenant_id) if list_apps else [])}
+        if set(ids) - known:
+            raise HTTPException(422, "Unknown application")
+        return sorted(set(ids))
+
     def checked_revision(user, revision):
         if user.get("membership_revision", 0) != revision:
             raise HTTPException(409, "Team access changed. Reload before continuing")
@@ -88,7 +98,7 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             raise HTTPException(409, "Keep at least one active customer administrator")
 
     def public(sub, u):
-        return {"sub": sub, "email": u.get("email") or sub, "roles": u["roles"], "app_access": u.get("app_access", {}),
+        return {"sub": sub, "email": u.get("email") or sub, "roles": u["roles"], "app_access": u.get("app_access", {}), "apps": u.get("apps"),
                 "role_labels": [ROLE_LABELS.get(r, r) for r in u["roles"]], "revision": u.get("membership_revision", 0)}
 
     @router.get("")
@@ -103,7 +113,7 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             return {"members": members,
                     "applications": [{"id": a["id"], "name": a["name"]} for a in (list_apps(p.tenant_id) if list_apps else [])],
                     "app_roles": [{"id": "preparer", "label": "Preparer"}, {"id": "reviewer", "label": "Reviewer"}],
-                    "pending": [{"email": email, "roles": u["roles"], "app_access": u.get("app_access", {}), "role_labels": [ROLE_LABELS.get(r, r) for r in u["roles"]],
+                    "pending": [{"email": email, "roles": u["roles"], "app_access": u.get("app_access", {}), "apps": u.get("apps"), "role_labels": [ROLE_LABELS.get(r, r) for r in u["roles"]],
                                  "registered_by": u.get("invited_by")} for email, u in store.pending_users.items() if u.get("tenant_id") == p.tenant_id],
                     "actor": p.sub, "local_preview": os.environ.get("TAAD_ENV", "local") == "local",
                     "role_options": [{"id": r, "label": ROLE_LABELS[ROLE_MAP[r][0]]} for r in OFFERED],
@@ -119,7 +129,8 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             if any(email == sub.lower() or email == str(u.get("email", "")).lower() for sub, u in store.users.items()) or email in store.pending_users:
                 raise HTTPException(409, "This email already has access or a pending access request")
             store.pending_users[email] = {"roles": ROLE_MAP[body.role], "tenant_id": p.tenant_id, "invited_by": p.sub, "at": time.time(),
-                                          "app_access": valid_access(p, body.app_access)}
+                                          "app_access": valid_access(p, body.app_access),
+                                          **({"apps": valid_apps(p, body.apps)} if body.apps is not None else {})}
             event(p, "governance.team.access_registered", email)
             try:
                 save()
@@ -140,7 +151,8 @@ def make_team_router(principal, store, persist=None, list_apps=None):
                 raise HTTPException(404, "Pending access registration not found")
             # The pending record is authoritative: request body cannot substitute a role.
             store.users[email] = {"email": email, "tenant_id": p.tenant_id, "roles": list(pending["roles"]), "membership_revision": 1,
-                                  "app_access": dict(pending.get("app_access", {}))}
+                                  "app_access": dict(pending.get("app_access", {})),
+                                  **({"apps": list(pending["apps"])} if "apps" in pending else {})}
             del store.pending_users[email]
             event(p, "governance.team.preview_activated", email)
             try:
@@ -160,6 +172,8 @@ def make_team_router(principal, store, persist=None, list_apps=None):
                 raise HTTPException(404, "Pending registration not found")
             if body.get("role") in ROLE_MAP:
                 pending["roles"] = list(ROLE_MAP[body["role"]])
+            if body.get("apps") is not None:
+                pending["apps"] = valid_apps(p, list(body["apps"]))
             if "app_access" in body:
                 for v in (body["app_access"] or {}).values():
                     if v not in APP_ROLES:
@@ -197,6 +211,8 @@ def make_team_router(principal, store, persist=None, list_apps=None):
             user.update(roles=list(ROLE_MAP[body.role]), membership_revision=body.revision + 1, tenant_id=p.tenant_id)
             if body.app_access is not None:
                 user["app_access"] = valid_access(p, body.app_access)
+            if body.apps is not None:
+                user["apps"] = valid_apps(p, body.apps)
             event(p, "governance.team.role_changed", sub)
             try:
                 save()

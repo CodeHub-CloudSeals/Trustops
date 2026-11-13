@@ -129,3 +129,23 @@ def test_cloudseals_admins_can_be_changed_and_removed_in_cloudseals_workspace(mo
     assert "b" not in STORE.users
     # the last administrator cannot be demoted
     assert c.put("/v1/governance/team/members/a/role", json={"revision": 0, "role": "viewer"}).status_code == 409
+
+
+def test_application_access_is_chosen_per_person(env):
+    import socket
+    from app import app_integrations
+    c, h = env
+    app = c.post("/v1/integrations", headers=h("admin@t-bank"), json={"name": "LedgerSight"}).json()
+    other = c.post("/v1/integrations", headers=h("admin@t-bank"), json={"name": "Other app"}).json()
+    key, key2 = app["trustops_key"], other["trustops_key"]
+    access = lambda k, e: c.get(f"/v1/app-access?email={e}", headers={"X-TrustOps-Key": k}).json()["role"]
+    assert c.post("/v1/governance/team/invites", headers=h("admin@t-bank"), json={"email": "p@bank.com", "role": "none", "apps": [app["id"]]}).status_code == 201
+    assert access(key, "p@bank.com") == "preparer" and access(key2, "p@bank.com") is None
+    assert c.post("/v1/governance/team/invites", headers=h("admin@t-bank"), json={"email": "x@bank.com", "role": "approver", "apps": ["nope"]}).status_code == 422
+    assert c.put("/v1/governance/team/pending/p@bank.com/access", headers=h("admin@t-bank"), json={"role": "approver", "apps": [other["id"]]}).status_code == 200
+    assert access(key, "p@bank.com") is None and access(key2, "p@bank.com") == "reviewer"
+    # existing members without a choice keep access to every application
+    assert access(key, "controller@t-bank") == "reviewer"
+    m = next(x for x in c.get("/v1/governance/team", headers=h("admin@t-bank")).json()["members"] if x["sub"] == "controller@t-bank")
+    assert c.put("/v1/governance/team/members/controller@t-bank/role", headers=h("admin@t-bank"), json={"revision": m["revision"], "role": "approver", "apps": []}).status_code == 200
+    assert access(key, "controller@t-bank") is None

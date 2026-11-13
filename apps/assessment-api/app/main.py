@@ -174,7 +174,8 @@ def maybe_activate_pending(ident: dict) -> bool:
         inv = STORE.pending_users.pop(email, None)
         if not inv:
             return False
-        STORE.users[ident["sub"]] = {"tenant_id": inv["tenant_id"], "roles": inv["roles"], "email": email}
+        STORE.users[ident["sub"]] = {"tenant_id": inv["tenant_id"], "roles": inv["roles"], "email": email,
+                                     **{k: inv[k] for k in ("apps", "app_access") if k in inv}}
         STORE.audit.append({"at": time.time(), "sub": ident["sub"], "tenant_id": inv["tenant_id"], "action": "user.activated", "ref": email})
     if persist.enabled():
         persist.save(STORE)
@@ -250,7 +251,7 @@ def app_access(email: str = Query(..., max_length=200), x_trustops_key: Optional
     tenant, integ = found
     email = email.strip().lower()
     with STORE.lock:
-        rec = next((u for u in STORE.users.values() if u.get("tenant_id") == tenant and (u.get("email") or "").lower() == email), None)
+        rec = next((u for sub, u in STORE.users.items() if u.get("tenant_id") == tenant and (u.get("email") or sub).lower() == email), None)
         if rec is None and tenant == ORG_TENANT:
             # CloudSeals administrators work in the CloudSeals workspace as its administrators (see console_principal).
             staff = next((u for u in STORE.users.values() if u.get("tenant_id") is None and "cloudseals_admin" in u.get("roles", [])
@@ -259,6 +260,8 @@ def app_access(email: str = Query(..., max_length=200), x_trustops_key: Optional
         if rec is None:
             pend = STORE.pending_users.get(email)
             rec = pend if pend and pend.get("tenant_id") == tenant else None
+    if rec is not None and rec.get("apps") is not None and integ["id"] not in rec["apps"]:
+        return {"email": email, "application": integ["name"], "role": None}     # not given this application
     explicit = (rec or {}).get("app_access", {}).get(integ["id"])
     roles = set((rec or {}).get("roles", []))
     # Application access follows the TrustOps role: admins and approvers review, preparers prepare, viewers have none.
