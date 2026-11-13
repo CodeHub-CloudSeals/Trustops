@@ -301,16 +301,11 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
         row("Allowed", s?.counts.ALLOW ?? "–"), row("Escalated to a person", s?.counts.ESCALATE ?? "–"), row("Denied", s?.counts.DENY ?? "–"),
         row("Still waiting for a person", s?.pending_approvals ?? "–"),
         row("Active policy rules", pol ? pol.rules.filter((r) => r.enabled).length : "–"),
-        row("Evidence chain", v ? (v.valid ? `Intact (${v.checked} records, hash-chained, not KMS signed)` : `Broken at ${v.broken_at}`) : "–"),
-        row("Cost per run", "Not tracked yet")),
-      el("p", { class: "tb-sub" }, "This report describes recorded activity only. It is not a compliance certification."));
+        row("Evidence chain", v ? (v.valid ? `Intact (${v.checked} records, hash-chained, not KMS signed)` : `Broken at ${v.broken_at}`) : "–")),
+      el("p", { class: "tb-sub" }, "The PDF has this summary, the policies in force, every escalation and denial with who decided it, the full decision log and an integrity check. It describes recorded activity only; it is not a compliance certification."), m);
     main.replaceChildren(page(head("OUTPUTS", "Reports", "Reports for your risk committee, auditors or regulators.",
       el("button", { class: "gov-button", type: "button", onclick: () => download("/v1/decisions-export?fmt=pdf", "trustops-governance-report.pdf").catch(() => {}) }, "Download PDF report")),
-      report,
-      card("Download", "Generated on demand from the live records.",
-        el("div", { class: "gov-actions" }, dl("Governance report (PDF)", "/v1/decisions-export?fmt=pdf", "trustops-governance-report.pdf", true)),
-        el("p", { class: "tb-sub" }, "Summary, policies in force, escalations and denials, the full decision log and an integrity check."), m),
-      card("AI readiness assessment", "CloudSeals assessments and their reports are kept separately from governance records.", el("div", { class: "gov-actions" }, el("a", { href: "#/assessment-overview" }, "Assessment home →"), el("a", { href: "#/assessments" }, "Assessments →"), el("a", { href: "#/reports" }, "Assessment reports →")))));
+      report));
   };
 
   // ---------- Authority: applications → agents → what each may do; people ----------
