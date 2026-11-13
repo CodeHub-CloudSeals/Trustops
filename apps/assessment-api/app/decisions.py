@@ -697,7 +697,12 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         items = []
         for r in recs:
             a = r["action"]
-            if r.get("simulated") or a == "load_review_details" or r["actor"]["id"] in me or r.get("requested_by") in me:
+            if r.get("simulated") or a == "load_review_details":
+                continue
+            # Your own clicks in TrustOps never notify you. An item an application sent and assigned to you does, even
+            # when the same person sent it from that application (one account signed in to both apps). Live issue 2026-11-13.
+            mine_in_app = r["decision"] == "ESCALATE" and not a.startswith("resolve_escalation:") and (r.get("assignment") or {}).get("to") in me
+            if (r["actor"]["id"] in me or r.get("requested_by") in me) and not mine_in_app:
                 continue
             if a.startswith("resolve_escalation:"):
                 src, kind = by_id.get(r.get("resource")) or {}, ("APPROVED" if a.endswith(":approve") else "REJECTED")
