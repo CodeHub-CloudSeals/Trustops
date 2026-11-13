@@ -149,7 +149,7 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
         el("div", { class: "gov-actions" }, approveBtn,
           el("button", { class: "gov-button gov-secondary", type: "button", onclick: decide("reject") }, hasDetails ? "Reject" : "Reject — ask for details")), m)
         : el("section", { class: "tb-card" }, el("h3", {}, "Decision"),
-            r.resolution ? el("div", { class: "rv-facts" }, fact("Outcome", r.resolution.outcome === "approve" ? "Approved" : "Rejected"), fact("By", r.resolution.by), fact("When", at(r.resolution.at)), fact("Reason", r.resolution.reason),
+            r.resolution ? el("div", { class: "rv-facts" }, fact("Outcome", r.resolution.outcome === "approve" ? "Approved" : "Rejected"), fact("By", r.resolution.by + (r.resolution.self_resolved ? " (self-approved by administrator)" : "")), fact("When", at(r.resolution.at)), fact("Reason", r.resolution.reason),
               fact("Based on", { details_in_trustops: "Details shown in TrustOps", checked_in_application: "Checked in the application", none: "—" }[r.resolution.basis] || "—"))
               : el("p", { class: "tb-sub" }, `${r.decision} — no person needed.`))));
   };

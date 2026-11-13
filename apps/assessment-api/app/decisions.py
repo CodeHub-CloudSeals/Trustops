@@ -436,7 +436,9 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if r["decision"] != "ESCALATE" or r.get("resolution"):
             raise _err(409, "not_pending", "This decision is not waiting for a person")
         who = identity(p) if identity else p.sub
-        if who == r["actor"]["id"] or p.sub == r["actor"]["id"] or who == r.get("requested_by"):
+        own = who == r["actor"]["id"] or p.sub == r["actor"]["id"] or who == r.get("requested_by")
+        # Approvers can never resolve their own items. Administrators can, and the record says so openly.
+        if own and "customer_admin" not in p.roles:
             raise _err(403, "maker_checker_violation", "The requester cannot approve their own action")
         outcome, reason = body.get("outcome"), str(body.get("reason", "")).strip()
         if outcome not in ("approve", "reject") or not reason:
@@ -448,14 +450,16 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if outcome == "approve" and not has_details and not (checked and d.get("link")):
             raise _err(409, "details_required", "This item has no details. Check it in the application (link required) or reject it and ask for details")
         r["resolution"] = {"outcome": outcome, "reason": reason[:2000], "by": who, "at": time.time(),
-                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none")}
+                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none"),
+                           "self_resolved": own}
         db.update(p.tenant_id, r)
         db.append(p.tenant_id, {"id": "dec_" + uuid.uuid4().hex[:16], "at": time.time(), "tenant_id": p.tenant_id,
                                 "application": r["application"], "actor": {"type": "human", "id": who},
                                 "action": f"resolve_escalation:{outcome}", "resource": did, "client": r.get("client"),
                                 "amount_minor": r.get("amount_minor"), "currency": r.get("currency"), "context": {"reason": reason[:500]},
                                 "decision": "ALLOW", "policy_id": "MAKER-CHECKER",
-                                "reason": f"Escalation {did} {outcome}d by a different person",
+                                "reason": (f"Escalation {did} {outcome}d by the administrator who submitted it (self-approval)" if own
+                                           else f"Escalation {did} {outcome}d by a different person"),
                                 "simulated": r.get("simulated", False), "requested_by": who})
         if audit:
             audit(p, f"decision.resolve.{outcome}", did)
