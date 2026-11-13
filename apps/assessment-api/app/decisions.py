@@ -20,7 +20,7 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 
 ADMIN = {"customer_admin", "cloudseals_admin"}
 APPROVERS = {"customer_controller", "customer_admin"}
@@ -66,7 +66,7 @@ def _err(status, code, message):
 
 
 # Fields that change after a record is written (who resolved it, details loaded later, who it is assigned to).
-UNHASHED = ("record_hash", "resolution", "loaded_details", "assignment")
+UNHASHED = ("record_hash", "resolution", "loaded_details", "assignment", "attachments")
 
 
 def digest(obj) -> str:
@@ -238,98 +238,186 @@ def stats(records):
             "cost_per_run": None, "cost_note": "Model cost is not tracked yet"}
 
 
-def render_pdf(tenant_name, generated_by, records, rules, verification):
-    """Governance report as PDF: summary, policies, items needing attention, decision log, integrity."""
+def render_pdf(tenant_name, generated_by, records, rules, verification, scope=None):
+    """Governance report as PDF (2026-11-13 layout): cover summary, outcomes, policies, items needing attention,
+    the decision log and integrity. Every table spans the full text width; long values wrap inside their cell;
+    times are UTC. `scope` describes a filtered download (who / what / when) and is printed under the title."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
+    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reporting import LOGO_PNG, logo_header
 
-    ink, panel, line = colors.HexColor("#172B4D"), colors.HexColor("#F0F3F9"), colors.HexColor("#E6EAF1")
-    tone = {"ALLOW": colors.HexColor("#067647"), "ESCALATE": colors.HexColor("#B54708"), "DENY": colors.HexColor("#B42318")}
+    PAGE = landscape(A4)
+    M = 14 * mm
+    W = PAGE[0] - 2 * M                                   # usable width; every table is sized to exactly this
+    ink, muted, line, band = colors.HexColor("#172B4D"), colors.HexColor("#5F6B80"), colors.HexColor("#E3E8F0"), colors.HexColor("#F2F5FA")
+    tone = {"ALLOW": colors.HexColor("#0F7F52"), "ESCALATE": colors.HexColor("#9A6210"), "DENY": colors.HexColor("#C03D3D"),
+            "APPROVED": colors.HexColor("#0F7F52"), "REJECTED": colors.HexColor("#C03D3D"), "PENDING": colors.HexColor("#9A6210")}
     ss = getSampleStyleSheet()
-    H1 = ParagraphStyle("h1", parent=ss["Title"], textColor=ink, alignment=0, fontSize=22, spaceAfter=4)
-    H2 = ParagraphStyle("h2", parent=ss["Heading2"], textColor=ink, fontSize=13, spaceBefore=10, spaceAfter=6)
-    B = ParagraphStyle("b", parent=ss["BodyText"], fontSize=9, leading=12, textColor=colors.HexColor("#344054"))
-    S = ParagraphStyle("s", parent=B, fontSize=7.5, leading=9.5)
+    H1 = ParagraphStyle("h1", parent=ss["Title"], textColor=ink, alignment=0, fontSize=22, leading=26, spaceAfter=2)
+    H2 = ParagraphStyle("h2", parent=ss["Heading2"], textColor=ink, fontSize=13, leading=16, spaceBefore=12, spaceAfter=6, keepWithNext=1)
+    B = ParagraphStyle("b", parent=ss["BodyText"], fontName="Helvetica", fontSize=9, leading=12, textColor=colors.HexColor("#344054"))
+    S = ParagraphStyle("s", parent=B, fontSize=7.6, leading=9.6)
+    SB = ParagraphStyle("sb", parent=S, fontName="Helvetica-Bold", textColor=ink)
+    HD = ParagraphStyle("hd", parent=S, fontName="Helvetica-Bold", textColor=muted, fontSize=7.2, leading=9)
+    MONO = ParagraphStyle("mono", parent=S, fontName="Courier", fontSize=7, leading=9, textColor=muted)
+    KV = ParagraphStyle("kv", parent=B, fontSize=8, leading=10, textColor=muted)
+    KN = ParagraphStyle("kn", parent=B, fontName="Helvetica-Bold", fontSize=15, leading=18, textColor=ink)
     esc = lambda t: (str(t if t is not None else "–")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    when = lambda t: time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
-    amt = lambda r: "–" if r.get("amount_minor") is None else f'{r["amount_minor"] / 100:,.2f} {r.get("currency") or ""}'
+    when = lambda t: time.strftime("%d %b %Y %H:%M", time.gmtime(t)) if t else "–"
+    amt = lambda r: "–" if r.get("amount_minor") is None else f'{r["amount_minor"] / 100:,.2f} {r.get("currency") or ""}'.strip()
+    who = lambda r: (f'Agent {r["actor"]["id"].split(":", 1)[1]}' if r["actor"]["id"].startswith("agent:") else f'Agent {r["actor"]["id"]}') \
+        if r["actor"]["type"] == "agent" else r["actor"]["id"]
     fin = lambda r: ({"approve": "APPROVED", "reject": "REJECTED"}[r["resolution"]["outcome"]] if r.get("resolution")
                      else "PENDING" if r["decision"] == "ESCALATE" else r["decision"])
+    col = lambda word: f'<font color="{tone[word].hexval().replace("0x", "#")}"><b>{word}</b></font>' if word in tone else esc(word)
+    P = lambda t, st=S: Paragraph(esc(t), st)
 
-    def grid(data, widths, header=True):
-        t = Table(data, colWidths=widths, repeatRows=1 if header else 0, hAlign="LEFT")
-        st = [("FONTSIZE", (0, 0), (-1, -1), 8), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-              ("LINEBELOW", (0, 0), (-1, -1), 0.4, line), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
-        if header:
-            st += [("BACKGROUND", (0, 0), (-1, 0), panel), ("TEXTCOLOR", (0, 0), (-1, 0), ink), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold")]
+    def grid(head, rows, fracs, zebra=True):
+        """A full-width table: `fracs` are relative column widths (they are scaled to the text width)."""
+        tot = sum(fracs)
+        t = Table([[Paragraph(h, HD) for h in head]] + rows, colWidths=[W * f / tot for f in fracs], repeatRows=1, hAlign="LEFT")
+        st = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+              ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+              ("BACKGROUND", (0, 0), (-1, 0), band), ("LINEBELOW", (0, 0), (-1, 0), 0.6, line), ("LINEBELOW", (0, 1), (-1, -1), 0.3, line)]
+        if zebra:
+            st += [("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFD")) for i in range(2, len(rows) + 1, 2)]
         t.setStyle(TableStyle(st))
         return t
 
     real = [r for r in records if not r.get("simulated") and not r["action"].startswith("resolve_escalation:") and r["action"] != "load_review_details"]
     st = stats(records)
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
+    doc = SimpleDocTemplate(buf, pagesize=PAGE, leftMargin=M, rightMargin=M, topMargin=18 * mm, bottomMargin=15 * mm,
                             title="TrustOps governance report", author="CloudSeals TrustOps")
 
-    def footer(canvas, d):
+    def chrome(canvas, d, first):
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
-        canvas.setFillColor(colors.HexColor("#667085"))
-        canvas.drawString(14 * mm, 8 * mm, f"CloudSeals TrustOps · Governance report · {esc(tenant_name)} · Records describe recorded activity only; this is not a compliance certification.")
-        canvas.drawRightString(landscape(A4)[0] - 14 * mm, 8 * mm, f"Page {d.page}")
+        canvas.setStrokeColor(line)
+        if not first:                                   # running header on every page after the first
+            x = M
+            try:
+                if LOGO_PNG.is_file():
+                    canvas.drawImage(str(LOGO_PNG), x, PAGE[1] - 12.5 * mm, width=6 * mm, height=6 * mm, mask="auto"); x += 8 * mm
+            except Exception:
+                pass
+            canvas.setFont("Helvetica-Bold", 8.5); canvas.setFillColor(ink)
+            canvas.drawString(x, PAGE[1] - 10.5 * mm, "TrustOps governance report")
+            canvas.setFont("Helvetica", 8); canvas.setFillColor(muted)
+            canvas.drawRightString(PAGE[0] - M, PAGE[1] - 10.5 * mm, f"{tenant_name} · generated {when(time.time())} UTC")
+            canvas.line(M, PAGE[1] - 14 * mm, PAGE[0] - M, PAGE[1] - 14 * mm)
+        canvas.line(M, 11 * mm, PAGE[0] - M, 11 * mm)
+        fx = M
+        try:
+            if LOGO_PNG.is_file():
+                canvas.drawImage(str(LOGO_PNG), fx, 6.2 * mm, width=4 * mm, height=4 * mm, mask="auto"); fx += 5.5 * mm
+        except Exception:
+            pass
+        canvas.setFont("Helvetica", 7); canvas.setFillColor(muted)
+        canvas.drawString(fx, 7.5 * mm, f"CloudSeals TrustOps · {tenant_name} · Records describe recorded activity only; this is not a compliance certification.")
+        canvas.drawRightString(PAGE[0] - M, 7.5 * mm, f"Page {d.page}")
         canvas.restoreState()
 
-    story = [Paragraph("TrustOps governance report", H1),
-             Paragraph(f"{esc(tenant_name)} · generated {when(time.time())} by {esc(generated_by)}", B), Spacer(1, 8)]
+    sub = f"{esc(tenant_name)} · generated {when(time.time())} UTC by {esc(generated_by)}"
+    story = logo_header([Paragraph("TrustOps governance report", H1), Paragraph(sub, B)], logo_mm=18, width_mm=W / mm) + [Spacer(1, 8)]
+    if scope:
+        story += [Table([[Paragraph(f"<b>Filtered download</b> · {esc(scope)}", B)]], colWidths=[W],
+                        style=[("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EDF3FF")), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                               ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]), Spacer(1, 8)]
+
+    # summary: six figure boxes in one row
     pct = lambda x: "–" if x is None else f"{round(x * 100)}%"
-    story += [Paragraph("Summary", H2), grid([
-        ["Decisions recorded", str(st["total"]), "Allowed", str(st["counts"]["ALLOW"])],
-        ["Escalated to a person", f'{st["counts"]["ESCALATE"]} ({pct(st["escalation_rate"])})', "Denied", f'{st["counts"]["DENY"]} ({pct(st["deny_rate"])})'],
-        ["Still waiting for a person", str(st["pending_approvals"]), "Simulated tests (excluded)", str(st["simulated"])],
-        ["Evidence chain", ("Intact" if verification["valid"] else f'Broken at {verification.get("broken_at")}') + f' · {verification["checked"]} records',
-         "Integrity", "SHA-256 hash chain (not KMS signed)"],
-        ["Cost per run", "Not tracked yet", "Applications", ", ".join(st["by_application"]) or "–"],
-    ], [55 * mm, 80 * mm, 55 * mm, 80 * mm], header=False)]
+    box = lambda n, k: [Paragraph(esc(n), KN), Paragraph(esc(k), KV)]
+    figs = [box(st["total"], "decisions recorded"), box(st["counts"]["ALLOW"], "allowed"),
+            box(f'{st["counts"]["ESCALATE"]}', f'sent to a person ({pct(st["escalation_rate"])})'),
+            box(f'{st["counts"]["DENY"]}', f'blocked ({pct(st["deny_rate"])})'), box(st["pending_approvals"], "still waiting"),
+            box("Intact" if verification["valid"] else "BROKEN", f'evidence chain · {verification["checked"]} records')]
+    kt = Table([[f[0] for f in figs], [f[1] for f in figs]], colWidths=[W / 6] * 6, hAlign="LEFT")
+    kt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), band), ("LEFTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, 0), 9),
+                            ("BOTTOMPADDING", (0, 1), (-1, 1), 9), ("LINEAFTER", (0, 0), (-2, -1), 3, colors.white)]))
+    story += [Paragraph("Summary", H2), kt, Spacer(1, 4),
+              Paragraph(f'Applications: {esc(", ".join(st["by_application"]) or "–")} · simulated tests excluded from the figures: {st["simulated"]} · '
+                        "integrity: SHA-256 hash chain (not KMS signed) · cost per run: not tracked yet", S)]
     if st["repeated_denials"]:
-        story += [Paragraph("Repeated denials (3 or more)", H2),
-                  grid([["Actor", "Denials"]] + [[esc(x["actor"]), str(x["denials"])] for x in st["repeated_denials"]], [120 * mm, 30 * mm])]
-    story += [Paragraph("Policies in force", H2), grid([["On", "ID", "Rule", "Actions", "Who", "Amount limit", "Decision"]] + [
-        ["Yes" if r.get("enabled", True) else "No", r["id"], Paragraph(esc(r["name"]), S), Paragraph(esc(", ".join(r["actions"])), S),
-         ", ".join(r.get("actor_types") or []) or "anyone",
-         "–" if r.get("min_amount_minor") is None else f'above {r["min_amount_minor"] / 100:,.2f}', r["decision"]] for r in rules],
-        [12 * mm, 20 * mm, 70 * mm, 75 * mm, 25 * mm, 30 * mm, 25 * mm])]
+        story += [KeepTogether([Paragraph("Repeated denials (3 or more)", H2),
+                                grid(["Who", "Denials"], [[P(x["actor"].replace("agent:agent:", "agent:")), P(str(x["denials"]))] for x in st["repeated_denials"]], [5, 1])])]
+
+    story += [Paragraph("Policies in force", H2), grid(["On", "Policy", "Rule", "Actions", "Who", "Amount limit", "Decision"], [
+        [P("Yes" if r.get("enabled", True) else "No"), P(r["id"], SB), P(r["name"]), P(", ".join(r["actions"])),
+         P(", ".join(r.get("actor_types") or []) or "anyone"),
+         P("–" if r.get("min_amount_minor") is None else f'above {r["min_amount_minor"] / 100:,.2f}'), Paragraph(col(r["decision"]), S)] for r in rules],
+        [3, 6, 20, 28, 7, 9, 8])]
+
     attention = [r for r in real if r["decision"] in ("ESCALATE", "DENY")]
     story += [Paragraph(f"Escalations and denials ({len(attention)})", H2)]
-    story += [grid([["Time", "Application", "Actor", "Action", "Amount", "Decision", "Policy", "Outcome", "Resolved by"]] + [
-        [when(r["at"]), Paragraph(esc(r["application"]["name"]), S), Paragraph(esc(f'{r["actor"]["type"]}: {r["actor"]["id"]}'), S),
-         Paragraph(esc(r["action"]), S), amt(r), r["decision"], r["policy_id"], fin(r),
-         Paragraph(esc((r.get("resolution") or {}).get("by", "")), S)] for r in attention],
-        [30 * mm, 35 * mm, 38 * mm, 38 * mm, 25 * mm, 20 * mm, 22 * mm, 22 * mm, 38 * mm])] if attention else [Paragraph("None.", B)]
+    story += [grid(["Time (UTC)", "Application", "Who", "Action", "Amount", "Decision", "Policy", "Outcome", "Decided by"], [
+        [P(when(r["at"])), P(r["application"]["name"]), P(who(r)), P(r["action"]), P(amt(r)), Paragraph(col(r["decision"]), S),
+         P(r["policy_id"]), Paragraph(col(fin(r)), S), P((r.get("resolution") or {}).get("by", ""))] for r in attention],
+        [11, 10, 13, 13, 9, 8, 9, 8, 13])] if attention else [Paragraph("None.", B)]
+
     story += [PageBreak(), Paragraph(f"Decision log ({len(records)} records, including resolutions and simulated tests)", H2)]
-    rows = [["#", "Time", "Application", "Actor", "Action", "Client", "Amount", "Decision", "Policy", "Reason", "Record hash"]]
-    for r in records:
-        rows.append([str(r["sequence"]), when(r["at"]), Paragraph(esc(r["application"]["name"]), S),
-                     Paragraph(esc(f'{r["actor"]["type"]}: {r["actor"]["id"]}'), S), Paragraph(esc(r["action"]), S),
-                     Paragraph(esc(r.get("client")), S), amt(r), r["decision"], r["policy_id"], Paragraph(esc(r["reason"]), S),
-                     Paragraph(r["record_hash"][:16] + "…", S)])
-    log = grid(rows, [9 * mm, 28 * mm, 30 * mm, 32 * mm, 30 * mm, 20 * mm, 22 * mm, 18 * mm, 22 * mm, 40 * mm, 24 * mm])
-    log.setStyle(TableStyle([("TEXTCOLOR", (7, i), (7, i), tone.get(rows[i][7], ink)) for i in range(1, len(rows))]))
-    story += [log, Spacer(1, 10), Paragraph("Integrity", H2), Paragraph(
-        "Each record stores the SHA-256 hash of the previous record. Changing any record breaks every hash after it. "
-        f"Verification at generation time: {'intact' if verification['valid'] else 'BROKEN'} across {verification['checked']} records. "
-        "Records are not signed with a cloud KMS key in this environment. The JSON audit pack contains the full records for independent re-verification.", B)]
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    story += [grid(["#", "Time (UTC)", "Application", "Who", "Action", "Amount", "Decision", "Policy", "Reason", "Record hash"], [
+        [P(str(r["sequence"])), P(when(r["at"])), P(r["application"]["name"]), P(who(r)), P(r["action"].replace("resolve_escalation:", "resolve: ")),
+         P(amt(r)), Paragraph(col(r["decision"]), S), P(r["policy_id"]), P(r["reason"]), Paragraph(r["record_hash"][:12] + "…", MONO)] for r in records],
+        [3, 10, 9, 11, 12, 8, 7, 11, 19, 9])]
+    story += [KeepTogether([Paragraph("Integrity", H2), Paragraph(
+        "Each record stores the SHA-256 hash of the previous record, so changing any record breaks every hash after it. "
+        f"Verification when this report was generated: <b>{'intact' if verification['valid'] else 'BROKEN'}</b> across {verification['checked']} records"
+        f"{' (the whole chain, not only the records in this download)' if scope else ''}. "
+        "Records are not signed with a cloud KMS key in this environment. The JSON audit pack holds the full records for independent re-verification.", B)])]
+    doc.build(story, onFirstPage=lambda c, d: chrome(c, d, True), onLaterPages=lambda c, d: chrome(c, d, False))
     return buf.getvalue()
+
+
+def insights(records, rules, now=None):
+    """Overview charts (2026-11-13): decision mix, approval outcomes, time to decide, policies that decide most."""
+    now = now or time.time()
+    real = [r for r in records if not r.get("simulated") and not r["action"].startswith("resolve_escalation:") and r["action"] != "load_review_details"]
+    mix = {d: sum(r["decision"] == d for r in real) for d in DECISIONS}
+    esc = [r for r in real if r["decision"] == "ESCALATE"]
+    res = [r for r in esc if r.get("resolution")]
+    outcomes = {"approved": sum(r["resolution"]["outcome"] == "approve" for r in res),
+                "rejected": sum(r["resolution"]["outcome"] == "reject" for r in res), "waiting": len(esc) - len(res)}
+    hours = sorted(max(0.0, (r["resolution"]["at"] - r["at"]) / 3600) for r in res)
+    pick = lambda q: round(hours[min(len(hours) - 1, int(q * (len(hours) - 1) + 0.5))], 1) if hours else None
+    waiting_ages = [(now - r["at"]) / 3600 for r in esc if not r.get("resolution")]
+    names = {x["id"]: x["name"] for x in rules}
+    by_policy = {}
+    for r in real:
+        by_policy[r["policy_id"]] = by_policy.get(r["policy_id"], 0) + 1
+    top = sorted(by_policy.items(), key=lambda kv: -kv[1])
+    policies = [{"id": k, "name": names.get(k, "No policy covered it" if k == DEFAULT_ID else k), "count": v} for k, v in top[:4]]
+    if len(top) > 4:
+        policies.append({"id": "OTHER", "name": f"{len(top) - 4} other policies", "count": sum(v for _, v in top[4:])})
+    return {"total": len(real), "mix": mix, "outcomes": outcomes,
+            "turnaround": {"decided": len(hours), "median_hours": pick(0.5), "p90_hours": pick(0.9), "target_hours": 24,
+                           "within_target": sum(h <= 24 for h in hours), "oldest_waiting_hours": round(max(waiting_ages), 1) if waiting_ages else None},
+            "policies": policies,
+            "actors": {t: sum(r["actor"]["type"] == t for r in real) for t in ("agent", "human", "service")}}
 
 
 def _public(r):
     return r
 
 
-def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None, reviewers=None):
+# Files an approver attaches to an item waiting for them (2026-11-13 action items: "Upload button for reviewers").
+ATTACH_TYPES = {"application/pdf", "text/plain", "text/csv", "application/json", "image/png", "image/jpeg",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+ATTACH_MAX = 10 * 1024 * 1024
+ATTACH_PER_ITEM = 10
+_BAD_NAME = set('<>:"|?*')
+
+
+def _safe_name(filename):
+    base = str(filename or "").replace("\\", "/").split("/")[-1]
+    return "".join(ch for ch in base if ch.isprintable() and ch not in _BAD_NAME).strip()[:120] or "file"
+
+
+def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None, reviewers=None,
+                files=None):
     router = APIRouter(tags=["Decisions"])
     db = store or DecisionStore(state)
 
@@ -522,10 +610,155 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             audit(p, f"decision.resolve.{outcome}", did)
         return r
 
+    # ---- attachments: an approver uploads a supporting file (receipt, remittance, ...) to an item waiting for them ----
+    # The bytes are checked (type, content, malware scan) by `files` (main.py) and kept in object storage; the record
+    # keeps the file's name, size, SHA-256, who and when. Attachments sit outside the hash (like the resolution), so
+    # adding one never breaks the evidence chain; each upload is in the audit log.
+    @router.post("/v1/decisions/{did}/attachments", status_code=201)
+    async def attach(did: str, request: Request, filename: str = Query(..., min_length=1, max_length=200), p=Depends(principal)):
+        need(p, APPROVERS, "Only an approver or administrator can attach files")
+        if files is None or not files.available():
+            raise _err(501, "not_available", "File uploads are not available in this environment")
+        r = db.get(p.tenant_id, did)
+        if not r:
+            raise _err(404, "not_found", "Decision not found")
+        if r["decision"] != "ESCALATE" or r.get("resolution"):
+            raise _err(409, "not_pending", "Files can be attached only while the item is waiting for a decision")
+        if len(r.get("attachments") or []) >= ATTACH_PER_ITEM:
+            raise _err(409, "too_many", f"An item can have at most {ATTACH_PER_ITEM} files")
+        ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+        if ctype not in ATTACH_TYPES:
+            raise _err(422, "type_not_allowed", "Attach a PDF, image (PNG or JPEG), Word, Excel, CSV, text or JSON file")
+        data = b""
+        async for chunk in request.stream():
+            data += chunk
+            if len(data) > ATTACH_MAX:
+                raise _err(422, "too_large", "Files can be at most 10 MB")
+        if not data:
+            raise _err(422, "empty", "The file is empty")
+        verdict = files.check(ctype, data)
+        if verdict["state"] != "clean":
+            if audit:
+                audit(p, f"decision.attach.{verdict['state']}", did)
+            raise _err(422, "file_rejected", f"The file was not accepted ({verdict.get('reason') or verdict['state']})")
+        fid = "att_" + uuid.uuid4().hex[:16]
+        files.put(p.tenant_id, fid, data)
+        meta = {"id": fid, "filename": _safe_name(filename), "content_type": ctype, "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(), "by": identity(p) if identity else p.sub, "at": time.time()}
+        r["attachments"] = list(r.get("attachments") or []) + [meta]
+        db.update(p.tenant_id, r)
+        if audit:
+            audit(p, "decision.attach", f"{did}/{fid}")
+        return meta
+
+    @router.get("/v1/decisions/{did}/attachments/{fid}")
+    def attachment(did: str, fid: str, p=Depends(principal)):
+        need(p, READ)
+        r = db.get(p.tenant_id, did)
+        meta = next((a for a in (r or {}).get("attachments") or [] if a["id"] == fid), None)
+        if not meta or files is None:
+            raise _err(404, "not_found", "File not found")
+        data = files.get(p.tenant_id, fid)
+        safe = meta["filename"].encode("ascii", "replace").decode().replace('"', "'")
+        return Response(data, media_type=meta["content_type"], headers={"Content-Disposition": f'attachment; filename="{safe}"',
+                                                                       "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+
+    # ---- TrustTwin (the console's read-only assistant; answers come from the records, see assistant.py) ----
+    @router.get("/v1/assistant/suggestions")
+    def assistant_suggestions(p=Depends(principal)):
+        need(p, READ)
+        from .assistant import SUGGESTIONS
+        return {"suggestions": SUGGESTIONS, "name": "TrustTwin"}
+
+    @router.post("/v1/assistant/ask")
+    def assistant_ask(body: dict = Body(...), p=Depends(principal)):
+        need(p, READ)
+        from .assistant import answer
+        q = body.get("question")
+        if not isinstance(q, str) or not q.strip():
+            raise _err(422, "invalid_request", "question is required")
+        recs = db.all(p.tenant_id)
+        out = answer(q, records=recs, rules=db.rules(p.tenant_id), verification=verify_chain(recs),
+                     me={p.sub, identity(p) if identity else p.sub}, roles=p.roles, approvers=APPROVERS)
+        if audit:   # who asked and how it was answered; the question text itself is not stored
+            audit(p, "assistant.ask", out["status"])
+        return out
+
+    # ---- notifications: what happened in the decision log that this person should know about ----
+    # Read from the hash-chained decision records, so every browser sees the same list. Approvers and administrators
+    # are told when an application sends an item for approval or an agent's action is escalated to a person; everyone
+    # is told when someone else approves or rejects an item, and when an agent is blocked. Your own actions never
+    # notify you. Only "seen" is stored (per person, per workspace, on the user record).
+    def notification_items(p):
+        me = {p.sub, identity(p) if identity else p.sub}
+        recs = db.all(p.tenant_id)
+        by_id = {r["id"]: r for r in recs}
+        approver = bool(set(p.roles) & APPROVERS)
+        items = []
+        for r in recs:
+            a = r["action"]
+            if r.get("simulated") or a == "load_review_details":
+                continue
+            # Your own clicks in TrustOps never notify you. An item an application sent and assigned to you does, even
+            # when the same person sent it from that application (one account signed in to both apps). Live issue 2026-11-13.
+            mine_in_app = r["decision"] == "ESCALATE" and not a.startswith("resolve_escalation:") and (r.get("assignment") or {}).get("to") in me
+            if (r["actor"]["id"] in me or r.get("requested_by") in me) and not mine_in_app:
+                continue
+            if a.startswith("resolve_escalation:"):
+                src, kind = by_id.get(r.get("resource")) or {}, ("APPROVED" if a.endswith(":approve") else "REJECTED")
+                note = (r.get("context") or {}).get("reason")
+            elif r["decision"] == "ESCALATE" and approver:
+                kind = ("RESUBMITTED" if (r.get("context") or {}).get("resubmission") else "SUBMITTED") if a == "submit_for_review" else "ESCALATED"
+                src, note = r, (None if kind in ("SUBMITTED", "RESUBMITTED") else r.get("reason"))   # "Submitted for approval" adds nothing
+            elif r["decision"] == "DENY":
+                src, kind, note = r, "DENIED", r.get("reason")
+            else:
+                continue
+            to = (src.get("assignment") or {}).get("to")
+            items.append({"seq": r["sequence"], "kind": kind, "at": r["at"], "by": r["actor"]["id"], "by_type": r["actor"]["type"],
+                          "application": r["application"]["name"], "decision_id": src.get("id") or r.get("resource"),
+                          "title": (src.get("details") or {}).get("title") or str(src.get("action") or a).replace("_", " "),
+                          "action": src.get("action"), "policy_id": src.get("policy_id"), "client": src.get("client"),
+                          "amount_minor": src.get("amount_minor"), "currency": src.get("currency"), "note": (note or "")[:300],
+                          "for_me": bool(to) and to in me, "pending": src.get("decision") == "ESCALATE" and not src.get("resolution")})
+        return items, (recs[-1]["sequence"] if recs else 0)
+
+    def seen_marks(p):
+        users = getattr(db.state, "users", {})
+        return users[p.sub].setdefault("notif_seen", {}) if p.sub in users else {}
+
+    @router.get("/v1/notifications")
+    def notifications(limit: int = Query(30, ge=1, le=100), p=Depends(principal)):
+        need(p, READ)
+        items, _ = notification_items(p)
+        seen = int(seen_marks(p).get(p.tenant_id, 0))
+        for it in items:
+            it["unread"] = it["seq"] > seen
+        return {"unread": sum(it["unread"] for it in items), "items": list(reversed(items))[:limit], "seen": seen,
+                "for": "approver" if set(p.roles) & APPROVERS else "viewer"}
+
+    @router.post("/v1/notifications/seen")
+    def notifications_seen(body: dict = Body(...), p=Depends(principal)):
+        need(p, READ)
+        try:
+            upto = int(body.get("upto"))
+        except (TypeError, ValueError):
+            raise _err(422, "invalid_request", "upto must be a record number") from None
+        _, newest = notification_items(p)
+        marks = seen_marks(p)
+        with db.state.lock:
+            marks[p.tenant_id] = max(int(marks.get(p.tenant_id, 0)), max(0, min(upto, newest)))
+        return {"seen": marks.get(p.tenant_id, 0)}
+
     @router.get("/v1/decisions-stats")
     def get_stats(p=Depends(principal)):
         need(p, READ)
         return stats(db.all(p.tenant_id))
+
+    @router.get("/v1/decisions-insights")
+    def get_insights(p=Depends(principal)):
+        need(p, READ)
+        return insights(db.all(p.tenant_id), db.rules(p.tenant_id))
 
     @router.get("/v1/decisions-verify")
     def verify(p=Depends(principal)):
@@ -533,18 +766,54 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         return {**verify_chain(db.all(p.tenant_id)), "integrity": "sha256_hash_chain",
                 "signed": False, "note": "Records are hash-chained; they are not KMS signed in this environment."}
 
-    @router.get("/v1/decisions-export")
-    def export(fmt: str = Query("json", pattern="^(json|csv|pdf)$"), p=Depends(principal)):
+    # Evidence downloads (2026-11-13 action items): everything, or only what one person / agent did (asked, approved or
+    # rejected), one application, one outcome or a date range. The chain is always verified over ALL records.
+    def _who_did(r):
+        return {r["actor"]["id"]} | ({r["resolution"]["by"]} if r.get("resolution") else set())
+
+    @router.get("/v1/decisions-people")
+    def people(p=Depends(principal)):
         need(p, READ)
-        records = db.all(p.tenant_id)
+        seen = {}
+        for r in db.all(p.tenant_id):
+            if r["action"] == "load_review_details":
+                continue
+            for pid in _who_did(r):
+                kind = "agent" if (r["actor"]["id"] == pid and r["actor"]["type"] == "agent") else "person"
+                e = seen.setdefault(pid, {"id": pid, "kind": kind, "records": 0})
+                e["records"] += 1
+        apps = sorted({r["application"]["name"] for r in db.all(p.tenant_id)})
+        return {"people": sorted(seen.values(), key=lambda e: (e["kind"] != "person", e["id"])), "applications": apps}
+
+    @router.get("/v1/decisions-export")
+    def export(fmt: str = Query("json", pattern="^(json|csv|pdf)$"), person: Optional[str] = Query(None, max_length=200),
+               application: Optional[str] = Query(None, max_length=200), outcome: Optional[str] = Query(None, pattern="^(ALLOW|ESCALATE|DENY|APPROVED|REJECTED|PENDING)$"),
+               since: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), until: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+               p=Depends(principal)):
+        need(p, READ)
+        everything = db.all(p.tenant_id)
+        import calendar
+        day = lambda d, end=False: calendar.timegm(time.strptime(d, "%Y-%m-%d")) + (86400 if end else 0)   # UTC days
+        final = lambda r: ({"approve": "APPROVED", "reject": "REJECTED"}[r["resolution"]["outcome"]] if r.get("resolution")
+                           else "PENDING" if r["decision"] == "ESCALATE" else r["decision"])
+        records = [r for r in everything
+                   if (not person or person in _who_did(r)) and (not application or r["application"]["name"] == application)
+                   and (not outcome or r["decision"] == outcome or final(r) == outcome)
+                   and (not since or r["at"] >= day(since)) and (not until or r["at"] < day(until, True))]
+        scope = " · ".join(x for x in [f"person or agent: {person}" if person else "", f"application: {application}" if application else "",
+                                       f"outcome: {outcome.lower()}" if outcome else "",
+                                       f"from {since}" if since else "", f"to {until}" if until else ""] if x)
+        scope = f"{scope} · {len(records)} of {len(everything)} records" if scope else None
         if audit:
-            audit(p, "decision.export", fmt)
+            audit(p, "decision.export", f"{fmt}{' filtered' if scope else ''}")
         stamp = time.strftime("%Y%m%d-%H%M%S")
+        tag = "".join(ch if ch.isalnum() else "-" for ch in (person or "")).strip("-")[:40]
+        tag = f"-{tag}" if tag else ("-filtered" if scope else "")
         if fmt == "pdf":
             body = render_pdf(tenant_name(p.tenant_id) if tenant_name else p.tenant_id, identity(p) if identity else p.sub,
-                              records, db.rules(p.tenant_id), verify_chain(records))
+                              records, db.rules(p.tenant_id), verify_chain(everything), scope=scope)
             return Response(body, media_type="application/pdf",
-                            headers={"Content-Disposition": f'attachment; filename="trustops-governance-report-{stamp}.pdf"'})
+                            headers={"Content-Disposition": f'attachment; filename="trustops-governance-report{tag}-{stamp}.pdf"'})
         if fmt == "csv":
             buf = io.StringIO()
             w = csv.writer(buf)
@@ -558,13 +827,13 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                             {"approve": "APPROVED", "reject": "REJECTED"}.get(res.get("outcome"), "") or ("PENDING" if r["decision"] == "ESCALATE" else r["decision"]),
                             res.get("by", ""), r.get("simulated", False), r["record_hash"]])
             return Response(buf.getvalue(), media_type="text/csv",
-                            headers={"Content-Disposition": f'attachment; filename="trustops-decisions-{stamp}.csv"'})
+                            headers={"Content-Disposition": f'attachment; filename="trustops-decisions{tag}-{stamp}.csv"'})
         pack = {"format": "trustops.audit-pack.v1", "generated_at": time.time(), "tenant_id": p.tenant_id,
-                "generated_by": identity(p) if identity else p.sub, "verification": verify_chain(records),
+                "generated_by": identity(p) if identity else p.sub, "verification": verify_chain(everything), "filter": scope,
                 "integrity": "sha256_hash_chain (not KMS signed)", "policies": db.rules(p.tenant_id),
                 "summary": stats(records), "records": records}
         return Response(json.dumps(pack, indent=2), media_type="application/json",
-                        headers={"Content-Disposition": f'attachment; filename="trustops-audit-pack-{stamp}.json"'})
+                        headers={"Content-Disposition": f'attachment; filename="trustops-audit-pack{tag}-{stamp}.json"'})
 
     @router.get("/v1/policies")
     def get_rules(p=Depends(principal)):

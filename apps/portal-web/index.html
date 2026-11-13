@@ -12,18 +12,24 @@
 <link rel="stylesheet" href="applications.css?v=apps-2026-11-13a">
 <link rel="stylesheet" href="trust-boundary.css?v=tb-2026-11-13i">
 <link rel="stylesheet" href="ls-theme.css?v=ls-2026-11-13g">
+<link rel="stylesheet" href="ls-v7.css?v=v7-2026-11-13l">
 </head>
 <body>
 <a class="skip" href="#main">Skip to main content</a>
 <header class="top">
-  <div class="brand-lockup"><img src="images/logo.svg" alt="" aria-hidden="true"><h1>TrustOps<small>AI governance · CloudSeals</small></h1></div>
+  <div class="brand-lockup"><img src="images/logo.svg" alt="" aria-hidden="true"><h1>TrustOps<small>AI governance · CloudSeals</small></h1>
+    <button class="side-toggle" id="sideToggle" type="button" aria-label="Collapse menu" aria-expanded="true" title="Collapse menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></button></div>
   <nav id="nav" aria-label="Primary"></nav>
-  <div id="who" class="who"></div>
 </header>
-<section id="contextBar" class="context-bar" aria-label="Workspace context"></section>
+<div class="topbar">
+  <section id="contextBar" class="context-bar" aria-label="Workspace context"></section>
+  <div id="who" class="who"></div>
+</div>
 <div id="live" class="sr" role="status" aria-live="polite"></div>
 <div id="toast" class="toast" role="alert" hidden></div>
 <main id="main" tabindex="-1"></main>
-<script type="module" src="app.js?v=tb-2026-11-13t"></script>
+<script src="vendor/motion.min.js?v=12"></script>
+<script src="ui-plus.js?v=v7-2026-11-13b" defer></script>
+<script type="module" src="app.js?v=v7-2026-11-13j"></script>
 </body>
 </html>

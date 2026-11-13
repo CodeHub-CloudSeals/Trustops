@@ -1,6 +1,8 @@
-import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13d";
-import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13t";
+import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13h";
+import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13w";
 import { registerApplications } from "./applications.js?v=access-2026-11-13f";
+import { registerNotifications } from "./notifications.js?v=notif-2026-11-13b";
+import { registerAssistant } from "./assistant.js?v=tt-2026-11-13b";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);
 const main = $("#main"), nav = $("#nav"), who = $("#who"), contextBar = $("#contextBar");
@@ -88,7 +90,7 @@ async function oidcCallback(params) {
   history.replaceState({}, "", location.pathname);
 }
 function logout() {
-  sessionStorage.removeItem("taad_token"); sessionStorage.removeItem("pkce"); state.token = null; state.me = null;
+  sessionStorage.removeItem("taad_token"); sessionStorage.removeItem("pkce"); state.token = null; state.me = null; notify.reset(); twin.reset();
   const o = state.cfg.oidc;
   if (state.cfg.mode === "oidc" && o.logout_url && o.client_id && o.redirect_uri) {
     const url = new URL(o.logout_url); url.searchParams.set("client_id", o.client_id); url.searchParams.set("logout_uri", o.redirect_uri);
@@ -111,46 +113,41 @@ async function loginView() {
     }
   }
   document.body.classList.add("login-page");
-  const point = (t) => el("li", {}, t);
-  const step = (n, t, d) => el("li", {}, el("b", {}, n), el("div", {}, el("strong", {}, t), el("span", {}, d)));
-  const visual = el("section", { class: "lg-visual lg-light" },
-    el("div", { class: "lgl-brand" }, el("img", { src: "images/logo.svg", alt: "" }), el("span", {}, "CloudSeals")),
-    el("div", { class: "lgl-copy" },
-      el("span", { class: "lgl-eyebrow" }, "TrustOps · AI governance"),
-      el("h2", {}, "Every AI action.", el("br"), el("em", {}, "Checked before it happens.")),
+  // 2026-11-13 (action items): the same layout, sizes and footer as LedgerSight's sign-in page; no application
+  // examples, no underline, no "invitation-only" line; branding "© CloudSeals · TrustOps v1.0.0".
+  const ico = (d) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true");
+    d.split("|").forEach((part) => { const p = document.createElementNS(s.namespaceURI, "path"); p.setAttribute("d", part); s.append(p); }); return s; };
+  const step = (d, t, s) => el("li", {}, el("span", { class: "tls-ico" }, ico(d)), el("div", {}, el("b", {}, t), el("span", {}, s)));
+  const art = el("section", { class: "tl-art" }, el("div", { class: "tl-hero" },
+    el("div", { class: "tl-brand" }, el("img", { src: "images/logo.svg", alt: "" }), el("span", {}, "TrustOps"), el("em", {}, "by CloudSeals")),
+    el("div", { class: "tl-copy" },
+      el("div", { class: "tl-eyebrow" }, "TrustOps · AI governance"),
+      el("h2", {}, "Every AI action,", el("br"), el("span", { class: "tl-accent" }, "checked before it happens.")),
       el("p", {}, "Your applications ask TrustOps before they act. Routine work goes through, risky work waits for the right person, and every decision is kept as evidence.")),
-    el("div", { class: "lgl-stage", "aria-hidden": "true" },
-      el("div", { class: "lgl-card" },
-        el("div", { class: "lgl-row" }, el("span", { class: "lgl-app" }, "LedgerSight"), el("span", { class: "lgl-pill esc" }, "Waiting for approval")),
-        el("strong", { class: "lgl-title" }, "Partial receipt · $3,000.00"),
-        el("span", { class: "lgl-muted" }, "Invoice INV-2104 open $5,000.00 · $2,000.00 still owed"),
-        el("div", { class: "lgl-meta" }, el("span", {}, "Rule FIN-00"), el("span", {}, "Reviewer: Approver")),
-        el("div", { class: "lgl-actions" }, el("span", { class: "lgl-btn" }, "Approve"), el("span", { class: "lgl-btn ghost" }, "Reject"))),
-      el("ul", { class: "lgl-steps" },
-        step("1", "Ask", "The application sends the action"),
-        step("2", "Decide", "Allow, send for review, or deny"),
-        step("3", "Prove", "Each decision is hash-chained"))));
-  const card = el("section", { class: "lg-card" },
-    el("img", { src: "images/logo.svg", alt: "", class: "lg-logo" }),
-    el("span", { class: "lg-eyebrow dark" }, "TrustOps"),
-    el("h1", {}, "Sign in"),
-    el("p", { class: "lg-sub" }, "Use your organisation account."));
+    el("ol", { class: "tl-steps", "aria-label": "How it works" },
+      step("M4 12h12M12 6l6 6-6 6", "Ask", "The application asks before an agent or a person acts."),
+      step("M12 3l9 16H3z|M12 10v4M12 17h.01", "Decide", "Allowed, sent to the right approver, or blocked by your policies."),
+      step("M12 3l8 3v6c0 4.6-3.4 8.3-8 9-4.6-.7-8-4.4-8-9V6z|M8.5 12l2.5 2.5 4.5-5", "Prove", "Every decision is hash-chained into the evidence log."))));
+  const card = el("section", { class: "tl-card" }, el("h1", {}, "Welcome back"), el("p", { class: "tl-hint" }, "Sign in with your work account."));
   if (state.cfg.mode === "oidc") {
     const o = state.cfg.oidc;
     const ready = [o.authorize_url, o.token_url, o.client_id, o.redirect_uri].every(Boolean);
-    card.append(el("button", { class: "lg-btn", disabled: !ready, onclick: safe(oidcLogin) },
-      o.provider === "google" ? "Sign in with Google" : "Continue with organisation sign-in"),
-      ready ? "" : el("p", { class: "lg-note" }, "Sign-in is not configured yet. Contact your CloudSeals administrator."));
+    card.append(el("button", { class: "tl-btn", type: "button", disabled: !ready, onclick: safe(oidcLogin) },
+      el("span", {}, o.provider === "google" ? "Sign in with Google" : "Continue with organisation sign-in"), ico("M5 12h14M13 6l6 6-6 6")),
+      ready ? "" : el("p", { class: "tl-note" }, "Sign-in is not configured yet. Contact your CloudSeals administrator."));
   } else {
-    card.append(el("p", { class: "lg-note" }, "The local workspace could not be loaded. Check the API and seed data."));
+    card.append(el("p", { class: "tl-note" }, "The local workspace could not be loaded. Check the API and seed data."));
   }
-  const foot = el("p", { class: "lg-foot" }, "Invitation-only access · Your organisation manages users and roles");
-  main.replaceChildren(el("div", { class: "lg-wrap" }, visual, el("div", { class: "lg-side" }, card, foot)));
+  card.append(el("div", { class: "tl-trust" }, ico("M12 3l8 3v6c0 4.6-3.4 8.3-8 9-4.6-.7-8-4.4-8-9V6z|M8.5 12l2.5 2.5 4.5-5"), "Every sign-in is recorded in the audit log"));
+  main.replaceChildren(el("div", { class: "tl-login" }, art,
+    el("div", { class: "tl-side" }, el("div", { class: "tl-col" }, card, el("div", { class: "tl-foot" }, "© CloudSeals · TrustOps v1.0.0")))));
 }
 
 // ---------- routing ----------
 const routes = {};
 registerApplications({ routes, main, el, state, toast, api });
+const notify = registerNotifications({ el, api, toast, state });
+const twin = registerAssistant({ el, api, state });   // TrustTwin, bottom of the sidebar
 function go(hash) { location.hash = hash; }
 routes.register = async () => {
   const industries = ["Banking", "Investment", "Insurance", "Healthcare", "Logistics", "Industrial", "Government", "Other"];
@@ -196,7 +193,7 @@ async function render() {
     "connected-systems": "M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1", "governance-team": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" };
   const navIco = (route) => { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
     const pth = document.createElementNS(svg.namespaceURI, "path"); pth.setAttribute("d", NAV_SVG[route] || NAV_SVG.dashboard); svg.append(pth); return el("span", { class: "nav-icon" }, svg); };
-  const link = ([route, label]) => el("a", { href: `#/${route}`, class: "module-menu-link", "aria-current": activeRoute === route || (route === "connected-systems" && activeRoute === "add-application") ? "page" : null }, navIco(route), label);
+  const link = ([route, label]) => el("a", { href: `#/${route}`, class: "module-menu-link", "aria-current": activeRoute === route || (route === "connected-systems" && activeRoute === "add-application") ? "page" : null }, navIco(route), el("span", { class: "lbl-t" }, label));
   const group = (label, items) => el("details", { class: "module-menu-group", open: label === "Resources" && items.some(([route]) => route === activeRoute) }, el("summary", {}, label, el("span", { "aria-hidden": "true" }, "⌄")),
     el("div", { class: "module-menu-popover" }, items.map(link)));
   const adminItems = [
@@ -217,11 +214,27 @@ async function render() {
     link(["connected-systems", "Applications"]),
     hasAnyRole("customer_admin", "cloudseals_admin") ? link(["governance-team", "Team & access"]) : "",
     "");   // CloudSeals staff pages (cases, review queue, administration) stay reachable by URL only
-  who.replaceChildren(state.cfg.mode === "dev"
-    ? el("span", { class: "tag" }, state.me.tenant ? `${tenantLabel(state.me.tenant)} workspace` : "CloudSeals staff")
-    : el("span", { class: "who-email" }, state.me.email || state.me.sub), state.cfg.mode === "dev" ? "" : el("button", { class: "secondary", onclick: logout }, "Sign out"));
+  twin.mount(nav.parentNode);
+  // Top bar (LedgerSight style): workspace pill + current page on the left; who is signed in on the right.
+  const wsName = state.me.tenant ? tenantLabel(state.me.tenant) : "CloudSeals staff";
+  const initials = (s) => (String(s || "").replace(/@.*/, "").split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2) || "?").toUpperCase();
+  const ROLE_NAME = { customer_admin: "Administrator", cloudseals_admin: "CloudSeals admin", customer_controller: "Approver", customer_risk: "Risk",
+    customer_architect: "Architect", customer_contributor: "Contributor", auditor_readonly: "Auditor", cloudseals_reviewer: "Reviewer",
+    cloudseals_assessor: "Assessor", cloudseals_platform_ops: "Platform ops" };
+  const roleName = ROLE_NAME[roles.find((r) => ROLE_NAME[r])] || "Viewer";
+  const person = state.me.email || state.me.sub;
+  const topIco = (d) => { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    const pth = document.createElementNS(svg.namespaceURI, "path"); pth.setAttribute("d", d); svg.append(pth); return svg; };
+  who.replaceChildren(
+    el("span", { class: "role-pill", title: person }, el("span", { class: "role-dot", "aria-hidden": "true" }),
+      el("span", { class: "role-k" }, "Signed in as"), el("b", {}, roleName)),   // role only, like LedgerSight; the email shows on hover
+    notify.element(),
+    state.cfg.mode === "dev" ? "" : el("button", { class: "iconbtn", type: "button", onclick: logout, "aria-label": "Sign out", title: "Sign out" },
+      topIco("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3")),
+    el("span", { class: "avatar", title: `${person} · ${roleName}`, "aria-hidden": "true" }, initials(person)));
   contextBar.replaceChildren(
-    el("div", { class: "workspace-breadcrumb" }, el("span", {}, "Workspace"), el("span", { "aria-hidden": "true" }, "/"), el("strong", {}, ({dashboard:"Overview",assessments:"Assessments",assessment:"Assessment", "agent-flow":"Assessment process",trustops:"Overview",agents:"Assessment team",reports:"Reports",demo:"Demo Studio", "ledger-sight":"LedgerSight POC"})[name] || name.replaceAll("-", " "))),
+    el("div", { class: "ws-pill", title: `${wsName} workspace` }, el("span", { class: "ws-av", "aria-hidden": "true" }, initials(wsName)),
+      el("span", { class: "ws-name" }, el("small", {}, "Workspace"), el("b", {}, wsName))),
     el("div", { class: "workspace-context-actions" }));
   contextBar.scrollLeft = 0;
   // Pages that only CloudSeals staff (or specific staff roles) may use: show a clear message instead of an empty shell.
