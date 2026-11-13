@@ -522,6 +522,67 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             audit(p, f"decision.resolve.{outcome}", did)
         return r
 
+    # ---- notifications: what happened in the decision log that this person should know about ----
+    # Read from the hash-chained decision records, so every browser sees the same list. Approvers and administrators
+    # are told when an application sends an item for approval or an agent's action is escalated to a person; everyone
+    # is told when someone else approves or rejects an item, and when an agent is blocked. Your own actions never
+    # notify you. Only "seen" is stored (per person, per workspace, on the user record).
+    def notification_items(p):
+        me = {p.sub, identity(p) if identity else p.sub}
+        recs = db.all(p.tenant_id)
+        by_id = {r["id"]: r for r in recs}
+        approver = bool(set(p.roles) & APPROVERS)
+        items = []
+        for r in recs:
+            a = r["action"]
+            if r.get("simulated") or a == "load_review_details" or r["actor"]["id"] in me or r.get("requested_by") in me:
+                continue
+            if a.startswith("resolve_escalation:"):
+                src, kind = by_id.get(r.get("resource")) or {}, ("APPROVED" if a.endswith(":approve") else "REJECTED")
+                note = (r.get("context") or {}).get("reason")
+            elif r["decision"] == "ESCALATE" and approver:
+                kind = "SUBMITTED" if a == "submit_for_review" else "ESCALATED"
+                src, note = r, (None if kind == "SUBMITTED" else r.get("reason"))   # "Submitted for approval" adds nothing
+            elif r["decision"] == "DENY":
+                src, kind, note = r, "DENIED", r.get("reason")
+            else:
+                continue
+            to = (src.get("assignment") or {}).get("to")
+            items.append({"seq": r["sequence"], "kind": kind, "at": r["at"], "by": r["actor"]["id"], "by_type": r["actor"]["type"],
+                          "application": r["application"]["name"], "decision_id": src.get("id") or r.get("resource"),
+                          "title": (src.get("details") or {}).get("title") or str(src.get("action") or a).replace("_", " "),
+                          "action": src.get("action"), "policy_id": src.get("policy_id"), "client": src.get("client"),
+                          "amount_minor": src.get("amount_minor"), "currency": src.get("currency"), "note": (note or "")[:300],
+                          "for_me": bool(to) and to in me, "pending": src.get("decision") == "ESCALATE" and not src.get("resolution")})
+        return items, (recs[-1]["sequence"] if recs else 0)
+
+    def seen_marks(p):
+        users = getattr(db.state, "users", {})
+        return users[p.sub].setdefault("notif_seen", {}) if p.sub in users else {}
+
+    @router.get("/v1/notifications")
+    def notifications(limit: int = Query(30, ge=1, le=100), p=Depends(principal)):
+        need(p, READ)
+        items, _ = notification_items(p)
+        seen = int(seen_marks(p).get(p.tenant_id, 0))
+        for it in items:
+            it["unread"] = it["seq"] > seen
+        return {"unread": sum(it["unread"] for it in items), "items": list(reversed(items))[:limit], "seen": seen,
+                "for": "approver" if set(p.roles) & APPROVERS else "viewer"}
+
+    @router.post("/v1/notifications/seen")
+    def notifications_seen(body: dict = Body(...), p=Depends(principal)):
+        need(p, READ)
+        try:
+            upto = int(body.get("upto"))
+        except (TypeError, ValueError):
+            raise _err(422, "invalid_request", "upto must be a record number") from None
+        _, newest = notification_items(p)
+        marks = seen_marks(p)
+        with db.state.lock:
+            marks[p.tenant_id] = max(int(marks.get(p.tenant_id, 0)), max(0, min(upto, newest)))
+        return {"seen": marks.get(p.tenant_id, 0)}
+
     @router.get("/v1/decisions-stats")
     def get_stats(p=Depends(principal)):
         need(p, READ)

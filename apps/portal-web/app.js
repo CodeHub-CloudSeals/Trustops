@@ -1,6 +1,7 @@
 import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13d";
 import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13t";
 import { registerApplications } from "./applications.js?v=access-2026-11-13f";
+import { registerNotifications } from "./notifications.js?v=notif-2026-11-13a";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);
 const main = $("#main"), nav = $("#nav"), who = $("#who"), contextBar = $("#contextBar");
@@ -88,7 +89,7 @@ async function oidcCallback(params) {
   history.replaceState({}, "", location.pathname);
 }
 function logout() {
-  sessionStorage.removeItem("taad_token"); sessionStorage.removeItem("pkce"); state.token = null; state.me = null;
+  sessionStorage.removeItem("taad_token"); sessionStorage.removeItem("pkce"); state.token = null; state.me = null; notify.reset();
   const o = state.cfg.oidc;
   if (state.cfg.mode === "oidc" && o.logout_url && o.client_id && o.redirect_uri) {
     const url = new URL(o.logout_url); url.searchParams.set("client_id", o.client_id); url.searchParams.set("logout_uri", o.redirect_uri);
@@ -151,6 +152,7 @@ async function loginView() {
 // ---------- routing ----------
 const routes = {};
 registerApplications({ routes, main, el, state, toast, api });
+const notify = registerNotifications({ el, api, toast, state });
 function go(hash) { location.hash = hash; }
 routes.register = async () => {
   const industries = ["Banking", "Investment", "Insurance", "Healthcare", "Logistics", "Industrial", "Government", "Other"];
@@ -230,6 +232,7 @@ async function render() {
   who.replaceChildren(
     el("span", { class: "role-pill", title: person }, el("span", { class: "role-dot", "aria-hidden": "true" }),
       el("span", { class: "role-k" }, "Signed in as"), el("b", {}, state.cfg.mode === "dev" ? roleName : person)),
+    notify.element(),
     state.cfg.mode === "dev" ? "" : el("button", { class: "iconbtn", type: "button", onclick: logout, "aria-label": "Sign out", title: "Sign out" },
       topIco("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3")),
     el("span", { class: "avatar", title: `${person} · ${roleName}`, "aria-hidden": "true" }, initials(person)));

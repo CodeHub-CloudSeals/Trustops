@@ -369,3 +369,34 @@ def test_rename_application_keeps_its_key(env, public_dns):
     assert c.patch(f"/v1/integrations/{app['id']}", headers=h("admin@t-bank"), json={"name": "LedgerSight"}).json()["name"] == "LedgerSight"
     r = ask(c, app["trustops_key"], action="submit_for_review", actor_type="human", actor_id="p@x").json()
     assert c.get(f"/v1/decisions/{r['decision_id']}", headers=h("admin@t-bank")).json()["application"]["name"] == "LedgerSight"
+
+
+def test_notifications_bell_follows_the_decision_log(env, public_dns):
+    """The TrustOps bell: approvers hear about items sent for approval; others hear about approvals and blocks; your own
+    actions never notify you; "seen" is per person; other workspaces see nothing."""
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    sent = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
+        "actor": {"type": "human", "id": "staff@firm.example"}, "action": "submit_for_review", "client": "client-a",
+        "amount_minor": 50_000, "currency": "USD", "title": "Missing receipt EX-005", "facts": [{"label": "Bank line", "value": "500.00"}]}).json()
+    ask(c, key, actor_id="chat-agent", action="email_client")                       # blocked by FIN-02
+    bell = c.get("/v1/notifications", headers=h("controller@t-bank")).json()
+    kinds = {i["kind"]: i for i in bell["items"]}
+    assert bell["for"] == "approver" and bell["unread"] == 2
+    assert kinds["SUBMITTED"]["title"] == "Missing receipt EX-005" and kinds["SUBMITTED"]["pending"] and kinds["SUBMITTED"]["decision_id"] == sent["decision_id"]
+    assert kinds["DENIED"]["policy_id"] == "FIN-02" and kinds["DENIED"]["by"] == "chat-agent"
+    viewer = c.get("/v1/notifications", headers=h("risk@t-bank")).json()
+    assert viewer["for"] == "viewer" and [i["kind"] for i in viewer["items"]] == ["DENIED"]   # nothing to approve for a viewer
+    assert c.post(f"/v1/decisions/{sent['decision_id']}/resolve", headers=h("controller@t-bank"),
+                  json={"outcome": "approve", "reason": "Receipt checked"}).status_code == 200
+    mine = c.get("/v1/notifications", headers=h("controller@t-bank")).json()
+    assert "APPROVED" not in {i["kind"] for i in mine["items"]}                     # your own decision does not notify you
+    other = c.get("/v1/notifications", headers=h("controller2@t-bank")).json()
+    approved = next(i for i in other["items"] if i["kind"] == "APPROVED")
+    assert approved["by"] == "controller@t-bank" and approved["note"] == "Receipt checked" and not approved["pending"]
+    top = mine["items"][0]["seq"]
+    assert c.post("/v1/notifications/seen", headers=h("controller@t-bank"), json={"upto": top}).json()["seen"] == top
+    assert c.get("/v1/notifications", headers=h("controller@t-bank")).json()["unread"] == 0
+    assert c.get("/v1/notifications", headers=h("controller2@t-bank")).json()["unread"] > 0   # seen is per person
+    assert c.post("/v1/notifications/seen", headers=h("controller@t-bank"), json={"upto": "x"}).status_code == 422
+    assert c.get("/v1/notifications", headers=h("admin@t-health")).json()["items"] == []     # tenant isolation
