@@ -196,7 +196,7 @@ async function render() {
     "connected-systems": "M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1", "governance-team": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" };
   const navIco = (route) => { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
     const pth = document.createElementNS(svg.namespaceURI, "path"); pth.setAttribute("d", NAV_SVG[route] || NAV_SVG.dashboard); svg.append(pth); return el("span", { class: "nav-icon" }, svg); };
-  const link = ([route, label]) => el("a", { href: `#/${route}`, class: "module-menu-link", "aria-current": activeRoute === route || (route === "connected-systems" && activeRoute === "add-application") ? "page" : null }, navIco(route), label);
+  const link = ([route, label]) => el("a", { href: `#/${route}`, class: "module-menu-link", "aria-current": activeRoute === route || (route === "connected-systems" && activeRoute === "add-application") ? "page" : null }, navIco(route), el("span", { class: "lbl-t" }, label));
   const group = (label, items) => el("details", { class: "module-menu-group", open: label === "Resources" && items.some(([route]) => route === activeRoute) }, el("summary", {}, label, el("span", { "aria-hidden": "true" }, "⌄")),
     el("div", { class: "module-menu-popover" }, items.map(link)));
   const adminItems = [
@@ -217,11 +217,31 @@ async function render() {
     link(["connected-systems", "Applications"]),
     hasAnyRole("customer_admin", "cloudseals_admin") ? link(["governance-team", "Team & access"]) : "",
     "");   // CloudSeals staff pages (cases, review queue, administration) stay reachable by URL only
-  who.replaceChildren(state.cfg.mode === "dev"
-    ? el("span", { class: "tag" }, state.me.tenant ? `${tenantLabel(state.me.tenant)} workspace` : "CloudSeals staff")
-    : el("span", { class: "who-email" }, state.me.email || state.me.sub), state.cfg.mode === "dev" ? "" : el("button", { class: "secondary", onclick: logout }, "Sign out"));
+  // Top bar (LedgerSight style): workspace pill + current page on the left; who is signed in on the right.
+  const wsName = state.me.tenant ? tenantLabel(state.me.tenant) : "CloudSeals staff";
+  const initials = (s) => (String(s || "").replace(/@.*/, "").split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2) || "?").toUpperCase();
+  const ROLE_NAME = { customer_admin: "Administrator", cloudseals_admin: "CloudSeals admin", customer_controller: "Approver", customer_risk: "Risk",
+    customer_architect: "Architect", customer_contributor: "Contributor", auditor_readonly: "Auditor", cloudseals_reviewer: "Reviewer",
+    cloudseals_assessor: "Assessor", cloudseals_platform_ops: "Platform ops" };
+  const roleName = ROLE_NAME[roles.find((r) => ROLE_NAME[r])] || "Viewer";
+  const person = state.me.email || state.me.sub;
+  const topIco = (d) => { const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    const pth = document.createElementNS(svg.namespaceURI, "path"); pth.setAttribute("d", d); svg.append(pth); return svg; };
+  who.replaceChildren(
+    el("span", { class: "role-pill", title: person }, el("span", { class: "role-dot", "aria-hidden": "true" }),
+      el("span", { class: "role-k" }, "Signed in as"), el("b", {}, state.cfg.mode === "dev" ? roleName : person)),
+    state.cfg.mode === "dev" ? "" : el("button", { class: "iconbtn", type: "button", onclick: logout, "aria-label": "Sign out", title: "Sign out" },
+      topIco("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3")),
+    el("span", { class: "avatar", title: `${person} · ${roleName}`, "aria-hidden": "true" }, initials(person)));
+  const PAGE_NAME = { dashboard: "Overview", assessments: "Assessments", assessment: "Assessment", "agent-flow": "Assessment process", trustops: "Overview", agents: "Assessment team",
+    reports: "Reports", demo: "Demo Studio", "ledger-sight": "LedgerSight POC", approvals: "Approvals", approval: "Approvals", decisions: "Decisions", risk: "Risk",
+    policies: "Policies", authority: "Authority", evidence: "Evidence", "governance-reports": "Reports", "connected-systems": "Applications",
+    "add-application": "Applications", "governance-team": "Team & access" };
   contextBar.replaceChildren(
-    el("div", { class: "workspace-breadcrumb" }, el("span", {}, "Workspace"), el("span", { "aria-hidden": "true" }, "/"), el("strong", {}, ({dashboard:"Overview",assessments:"Assessments",assessment:"Assessment", "agent-flow":"Assessment process",trustops:"Overview",agents:"Assessment team",reports:"Reports",demo:"Demo Studio", "ledger-sight":"LedgerSight POC"})[name] || name.replaceAll("-", " "))),
+    el("div", { class: "ws-pill", title: `${wsName} workspace` }, el("span", { class: "ws-av", "aria-hidden": "true" }, initials(wsName)),
+      el("span", { class: "ws-name" }, el("small", {}, "Workspace"), el("b", {}, wsName))),
+    el("div", { class: "workspace-breadcrumb period-chip" }, navIco(activeRoute === "add-application" ? "connected-systems" : NAV_SVG[activeRoute] ? activeRoute : "dashboard"),
+      el("span", { class: "sr" }, "Workspace / "), el("strong", {}, PAGE_NAME[name] || name.replaceAll("-", " "))),
     el("div", { class: "workspace-context-actions" }));
   contextBar.scrollLeft = 0;
   // Pages that only CloudSeals staff (or specific staff roles) may use: show a clear message instead of an empty shell.

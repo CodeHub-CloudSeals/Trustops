@@ -23,16 +23,21 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
     const a = el("a", { href: url, download: name }); document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   };
-  const decisionRow = (r) => el("tr", {},
-    el("td", {}, at(r.at)),
-    el("td", {}, el("strong", {}, r.application.name), r.simulated ? el("p", {}, "simulated") : ""),
-    el("td", {}, `${r.actor.type}: ${r.actor.id}`),
-    el("td", { class: "gov-code" }, r.action),
-    el("td", {}, r.client || "–", el("p", {}, money(r))),
-    el("td", {}, pill(r.decision, TONE[r.decision]), el("p", { class: "gov-code" }, r.policy_id)),
-    el("td", { class: "w" }, r.reason),
-    el("td", {}, pill(final(r), TONE[final(r)])));
-  const DCOLS = ["Time", "Application", "Actor", "Action", "Client · amount", "Decision", "Reason", "Outcome"];
+  // Five grouped columns (LedgerSight table style: a main line and a muted second line) so the feed fits without sideways scrolling.
+  const decisionRow = (r) => {
+    const [day, time] = String(at(r.at)).split(/,\s*/);
+    const amount = money(r);
+    return el("tr", {},
+      el("td", { class: "dt-when" }, el("span", { class: "dt-main" }, day), time ? el("span", { class: "dt-sub" }, time) : ""),
+      el("td", {}, el("strong", { class: "dt-main" }, r.actor.id),
+        el("span", { class: "dt-sub" }, `${r.actor.type} · ${r.application.name}${r.simulated ? " · simulated" : ""}`)),
+      el("td", {}, el("span", { class: "dt-main gov-code" }, r.action),
+        el("span", { class: "dt-sub" }, [r.client || "no client", amount && amount !== "–" ? amount : ""].filter(Boolean).join(" · "))),
+      el("td", { class: "dt-dec" }, el("span", { class: "dt-main" }, pill(r.decision, TONE[r.decision]), " ", el("span", { class: "gov-code" }, r.policy_id)),
+        final(r) !== r.decision ? el("span", { class: "dt-sub" }, pill(final(r), TONE[final(r)])) : ""),
+      el("td", { class: "dt-why" }, r.reason));
+  };
+  const DCOLS = ["When", "Who", "Action", "Decision", "Reason"];
 
   // ---------- Decisions feed ----------
   routes.decisions = async (filter) => {

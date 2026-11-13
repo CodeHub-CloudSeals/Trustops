@@ -1,0 +1,348 @@
+/* =====================================================================================
+   TrustOps · LedgerSight design rules v7 (matches ledgersight audit-fixes, avocet.css "DESIGN RULES (v7)").
+   Presentation only: no markup is hidden that carries data, no behaviour changes.
+   1 Card: white, no border, soft shadow, 24px.          2 Inset (box inside a card): tint, no border, 16px.
+   3 Status = badge (pill + dot) or round icon.          4 Buttons: pill; 42px default, 34px compact; icon buttons round.
+   5 Fields: 42px, 12px corners; search fields are pills. 6 Badges/chips: pill or circle.
+   7 Tables: no outer frame, hairlines between rows only.
+   Loaded after ls-theme.css (which uses !important), so overrides here use !important where they must win.
+   ===================================================================================== */
+:root{
+  --sk-page:#F6F8FB;--sk-panel:#F6F8FB;--sk-side:#DFEBF6;--sk-card:#FFFFFF;--sk-ink:#172B4D;--sk-navpill:#FFFFFF;
+  --sk-grad:linear-gradient(135deg,#172B4D 0%,#22448F 52%,#356AE6 100%);
+  --sk-shadow:0 1px 2px rgba(23,43,77,.04),0 12px 32px -24px rgba(23,43,77,.28);
+  --ds-inset:#EEF4FA;--ds-r-card:24px;--ds-r-inset:16px;--ds-h:42px;--ds-h-sm:34px;
+  --ls-text:#172033;--ls-text-2:#3A4659;--ls-muted:#56647C;--ls-faint:#5F6B80;--ls-line:#E5EAF2;--ls-line-2:#D6DDE9;
+  --ls-accent:#356AE6;--ls-accent-soft:#EDF3FF;--ls-accent-line:#C9D9FB;--ls-hover:#F3F6FC;
+  --ls-ok:#0F7F52;--ls-ok-bg:#E8F7F0;--ls-ok-line:#BDE8D3;--ls-ok-solid:#16A36A;
+  --ls-warn:#9A6210;--ls-warn-bg:#FDF5E7;--ls-warn-line:#F3DCAE;--ls-warn-solid:#E9A23B;
+  --ls-bad:#C03D3D;--ls-bad-bg:#FDEEEE;--ls-bad-line:#F5C8C8;--ls-bad-solid:#E05252;
+  --ls-ring:0 0 0 3px color-mix(in srgb,#356AE6 16%,transparent);
+  --ls-spring:cubic-bezier(.34,1.56,.64,1);--ls-ease:cubic-bezier(.22,1,.36,1);
+  --side-w:268px;
+}
+
+/* ---------- page ---------- */
+body.workspace-ready{background:var(--sk-page)!important;color:var(--ls-text)!important;font-family:var(--ls-font)!important;font-size:14.5px;letter-spacing:.005em}
+.workspace-ready td,.workspace-ready .tb-stat strong,.workspace-ready .ap-amt,.workspace-ready .gov-code{font-variant-numeric:tabular-nums}
+/* scrollbars never visible; boxes still scroll by wheel, trackpad, touch and keyboard */
+.workspace-ready,.workspace-ready *{scrollbar-width:none}
+.workspace-ready ::-webkit-scrollbar{width:0;height:0}
+.workspace-ready :focus-visible{outline:2px solid var(--ls-accent);outline-offset:2px}
+/* the app focuses <main> on every page change: no ring round the whole page, and never scroll it under the sticky top bar */
+.workspace-ready main:focus,.workspace-ready main:focus-visible{outline:none}
+html:has(body.workspace-ready){scroll-padding-top:118px}
+
+/* ---------- sidebar ---------- */
+@media (min-width:761px){
+  .workspace-ready .top{inset:16px auto 16px 16px!important;width:var(--side-w)!important;height:calc(100vh - 32px)!important;background:var(--sk-side)!important;
+    border:0!important;border-radius:26px!important;padding:22px 16px 16px!important;box-shadow:none!important;display:flex!important;flex-direction:column!important;gap:0!important;
+    transition:width .45s var(--ls-ease),padding .3s var(--ls-ease);z-index:30}
+  .workspace-ready .topbar{position:sticky;top:16px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:76px;box-sizing:border-box;
+    margin:16px 16px 0 calc(var(--side-w) + 32px);padding:14px 16px;border-radius:24px;
+    background:color-mix(in srgb,var(--sk-page) 90%,transparent);backdrop-filter:saturate(1.6) blur(14px);-webkit-backdrop-filter:saturate(1.6) blur(14px);
+    transition:margin-left .45s var(--ls-ease)}
+  .workspace-ready main{margin:16px 16px 16px calc(var(--side-w) + 32px)!important;min-height:calc(100vh - 124px)!important;background:var(--sk-panel)!important;border-radius:28px!important;
+    padding:0!important;transition:margin-left .45s var(--ls-ease)}
+  body.workspace-ready.side-mini{--side-w:76px}
+}
+@media (min-width:761px) and (prefers-reduced-motion:reduce){.workspace-ready .top,.workspace-ready .topbar,.workspace-ready main{transition:none}}
+.topbar{display:none}
+.workspace-ready .topbar{display:flex}
+body.login-page .topbar{display:none!important}
+
+.workspace-ready .brand-lockup{display:flex;align-items:center;gap:12px;padding:2px 6px 22px!important;position:relative}
+.workspace-ready .brand-lockup img{width:40px;height:40px;flex:none}
+.workspace-ready .top h1{font-size:21px!important;font-weight:700!important;letter-spacing:-.02em!important;color:var(--sk-ink)!important;line-height:1.5!important;min-width:0}
+.workspace-ready .top h1 small{font-size:11px!important;font-weight:500!important;color:var(--ls-muted)!important;line-height:1.3;margin-top:0!important}
+.side-toggle{display:none}
+.workspace-ready .side-toggle{display:inline-flex;align-items:center;justify-content:center;margin-left:auto;flex:none;width:34px;height:34px;padding:0;border-radius:50%;
+  border:1px solid var(--ls-line);background:var(--sk-card);color:var(--ls-muted);cursor:pointer;
+  transition:transform .35s var(--ls-spring),background .2s,color .2s}
+.workspace-ready .side-toggle svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.workspace-ready .side-toggle:hover{background:var(--ds-inset);color:var(--ls-accent)}
+@media (max-width:760px){.workspace-ready .side-toggle{display:none}}
+
+.workspace-ready #nav{position:relative;gap:0!important;flex:1 1 auto;min-height:0;overflow-y:auto}
+.workspace-ready #nav>.nav-section-label{font-size:11px!important;letter-spacing:.14em!important;font-weight:600!important;color:var(--ls-muted)!important;margin:22px 14px 8px!important;padding:0!important;line-height:16.5px}
+.workspace-ready #nav>.nav-section-label:first-child,.workspace-ready #nav>.nav-pill+.nav-section-label{margin-top:6px!important}
+.workspace-ready .module-menu-link{z-index:1;gap:14px!important;padding:10px 14px!important;margin:2px 0!important;border-radius:14px!important;font-size:15.5px!important;font-weight:500!important;
+  line-height:23.25px;color:var(--ls-text-2)!important;background:transparent!important;box-shadow:none!important;transition:background .15s,color .15s}
+.workspace-ready .module-menu-link:hover{background:color-mix(in srgb,var(--sk-card) 60%,transparent)!important;color:var(--sk-ink)!important}
+.workspace-ready .module-menu-link[aria-current=page]{background:var(--sk-navpill)!important;color:var(--sk-ink)!important;font-weight:650!important;padding-left:12px!important}
+.workspace-ready .module-menu-link[aria-current=page]::before{left:-12px!important;top:9px!important;bottom:9px!important;width:4px!important}
+.workspace-ready .lbl-t{display:inline-block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:transform .25s var(--ls-ease)}
+.workspace-ready .module-menu-link:hover .lbl-t{transform:translateX(2px)}
+.workspace-ready .nav-icon svg{transition:transform .3s var(--ls-spring)}
+.workspace-ready .module-menu-link:hover .nav-icon svg{transform:translateX(2px) scale(1.08)}
+.workspace-ready .module-menu-link:active .nav-icon svg{transform:scale(.92)}
+/* sliding active pill (ui-plus.js): the link itself goes transparent, the pill draws the white capsule + marker */
+.nav-pill{position:absolute;left:0;top:0;width:0;height:0;border-radius:14px;background:var(--sk-navpill);pointer-events:none;z-index:0;box-shadow:none}
+.nav-pill::before{content:"";position:absolute;left:calc(-1 * var(--pl,12px));top:9px;bottom:9px;width:4px;border-radius:0 4px 4px 0;background:var(--sk-ink)}
+.workspace-ready #nav.has-pill .module-menu-link[aria-current=page]{background:transparent!important}
+.workspace-ready #nav.has-pill .module-menu-link[aria-current=page]::before{display:none!important}
+@media (max-width:760px){.nav-pill{display:none}}
+/* shorter screens: tighter menu so it fits without scrolling */
+@media (min-width:761px) and (max-height:960px){
+  .workspace-ready .module-menu-link{padding-top:6px!important;padding-bottom:6px!important}
+  .workspace-ready #nav>.nav-section-label{margin:10px 14px 3px!important}
+}
+
+/* collapsed rail */
+@media (min-width:761px){
+  body.side-mini .top{padding:18px 10px 14px!important}
+  body.side-mini .brand-lockup{flex-direction:column;gap:12px;padding:0 0 12px!important}
+  body.side-mini .brand-lockup h1{display:none}
+  body.side-mini .side-toggle{margin:0;transform:rotate(180deg)}
+  body.side-mini #nav{margin:0 -10px;padding:0 10px}
+  body.side-mini #nav>.nav-section-label{font-size:0!important;height:1px;background:var(--ls-line-2);margin:12px 10px!important;letter-spacing:0!important}
+  body.side-mini .module-menu-link{justify-content:center;padding:10px 0!important;gap:0!important}
+  /* hidden visually only: the link keeps its accessible name in the rail */
+  body.side-mini .module-menu-link .lbl-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  body.side-mini .module-menu-link[aria-current=page]::before{left:-10px!important}
+}
+.rail-tip{position:fixed;left:0;top:0;z-index:300;transform:translate(-6px,-50%);opacity:0;pointer-events:none;background:var(--sk-ink);color:var(--sk-card);
+  font-size:13px;font-weight:650;letter-spacing:.005em;padding:7px 12px;border-radius:10px;white-space:nowrap;box-shadow:0 10px 24px -10px rgba(23,43,77,.55);
+  transition:opacity .16s ease,transform .2s var(--ls-ease)}
+.rail-tip.on{opacity:1;transform:translate(0,-50%)}
+body:not(.side-mini) .rail-tip{display:none}
+
+/* ---------- top bar ---------- */
+.workspace-ready .context-bar{display:flex!important;align-items:center;gap:10px;min-width:0;height:auto!important;margin:0!important;padding:0!important;position:static!important;
+  background:none!important;border:0!important;box-shadow:none!important;overflow:visible}
+.workspace-ready .workspace-context-actions:empty{display:none}
+.ws-pill,.period-chip,.role-pill{display:inline-flex;align-items:center;height:46px;box-sizing:border-box;border-radius:999px;background:var(--sk-card);border:0;
+  box-shadow:0 1px 2px rgba(23,43,77,.05);transition:transform .2s var(--ls-ease),box-shadow .2s;white-space:nowrap}
+.ws-pill:hover,.period-chip:hover,.role-pill:hover{transform:translateY(-1px);box-shadow:0 6px 16px -10px rgba(23,43,77,.35)}
+.ws-pill{gap:9px;padding:0 18px 0 7px;min-width:0}
+.ws-av{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--sk-grad);color:#fff;font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.ws-name{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.ws-name small{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ls-muted)}
+.ws-name b{font-size:15px;font-weight:650;color:var(--sk-ink);overflow:hidden;text-overflow:ellipsis}
+.workspace-ready .workspace-breadcrumb.period-chip{display:inline-flex!important;align-items:center}
+.workspace-ready .period-chip{gap:10px;padding:0 18px 0 16px;font-size:14.5px;color:var(--sk-ink)}
+.workspace-ready .period-chip strong{font-weight:500}
+.workspace-ready .period-chip strong::first-letter{text-transform:uppercase}
+.workspace-ready .period-chip .nav-icon{width:17px!important;height:17px!important;flex:0 0 17px;color:var(--ls-accent)!important;opacity:1}
+.workspace-ready .period-chip .nav-icon svg{width:17px;height:17px}
+.workspace-ready .who{display:flex!important;align-items:center;gap:10px;margin:0!important;padding:0!important;border:0!important;flex:none}
+.role-pill{gap:8px;padding:0 18px 0 16px;font-size:13px;color:var(--ls-muted);max-width:340px}
+.role-dot{width:8px;height:8px;border-radius:50%;background:var(--ls-ok-solid);box-shadow:0 0 0 3px color-mix(in srgb,var(--ls-ok-solid) 18%,transparent);flex:none}
+.role-pill b{font-size:14px;font-weight:650;color:var(--sk-ink);overflow:hidden;text-overflow:ellipsis}
+.workspace-ready .iconbtn{display:inline-grid;place-items:center;width:46px;height:46px;padding:0;border-radius:50%;border:0;background:var(--sk-card);color:var(--ls-text-2);cursor:pointer;
+  box-shadow:0 1px 2px rgba(23,43,77,.05);transition:transform .2s var(--ls-ease),box-shadow .2s,color .2s}
+.workspace-ready .iconbtn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.workspace-ready .iconbtn:hover{transform:translateY(-1px);color:var(--ls-accent);box-shadow:var(--ls-ring)}
+.workspace-ready .iconbtn:active{transform:scale(.94)}
+.workspace-ready .avatar{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:var(--ls-accent-soft);color:var(--sk-ink);font-size:14px;font-weight:700;
+  box-shadow:0 0 0 3px var(--sk-card);transition:transform .25s var(--ls-spring);flex:none;cursor:default}
+.workspace-ready .avatar:hover{transform:scale(1.06)}
+@media (max-width:1100px){.role-k{display:none}.ws-name small{display:none}}
+@media (max-width:760px){
+  .workspace-ready .topbar{margin:10px 10px 0;padding:8px;min-height:0;border-radius:20px;position:static}
+  .workspace-ready .workspace-breadcrumb.period-chip,.workspace-ready .period-chip,.role-pill{display:none!important}
+  .workspace-ready main{margin:10px!important;width:auto!important}
+  /* phones: the menu is the sticky header (about 104px) and the top bar follows it in the page flow */
+  html:has(body.workspace-ready){scroll-padding-top:200px}
+}
+
+/* ---------- page headers ---------- */
+.workspace-ready .tb,.workspace-ready main>.gov:not(.tb){padding:34px 34px 96px!important}
+.gov-page-heading{margin:0 0 8px!important;gap:16px}
+.gov-page-heading h2{font-size:40px!important;font-weight:600!important;letter-spacing:-.035em!important;line-height:1.08!important;color:var(--sk-ink)!important;margin:0 0 4px!important}
+.gov-page-heading p{font-size:15.5px!important;line-height:1.5!important;color:var(--ls-muted)!important;max-width:820px}
+.gov-kicker{display:block;font-size:11px!important;letter-spacing:.14em!important;font-weight:600!important;color:var(--ls-muted)!important;margin-bottom:10px!important}
+
+/* ---------- cards (rule 1) ---------- */
+.tb-card,.gov-panel,.gov-notice,.rk-banner,.workspace-ready .module-panel,.workspace-ready .card{background:var(--sk-card)!important;border:0!important;border-radius:var(--ds-r-card)!important;box-shadow:var(--sk-shadow)!important}
+.tb-card{padding:24px 26px!important;transition:box-shadow .25s}
+.tb-card h3,.gov-panel h3,.gov-panel-head h3{font-size:18px!important;font-weight:650!important;letter-spacing:-.01em!important;color:var(--sk-ink)!important}
+.tb-sub{font-size:13.5px!important;color:var(--ls-muted)!important}
+.gov-panel-head{padding:22px 26px 6px!important;border:0!important}
+.gov-panel-head p{color:var(--ls-muted)!important;font-size:13.5px!important}
+.rk-banner{padding:22px 26px!important}
+.rk-act{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important;box-shadow:none!important}
+.rk-watch{background:var(--ls-warn-bg)!important;color:var(--ls-warn)!important;box-shadow:none!important}
+.rk-normal{background:var(--ls-ok-bg)!important;color:var(--ls-ok)!important;box-shadow:none!important}
+
+/* ---------- boxes inside cards (rule 2) ---------- */
+.ap-item,.au-agent,.rk-row,.rv-fact,.tb-agent,.cp-role-grid>article,.tb-dim,.tb-tile,.tb-band li{background:var(--ds-inset)!important;border:0!important;border-radius:var(--ds-r-inset)!important;box-shadow:none!important}
+.ap-item{border-radius:20px!important;padding:16px 18px!important;transition:transform .25s var(--ls-ease),background .2s}
+.ap-item:hover{background:color-mix(in srgb,var(--ds-inset) 70%,var(--ls-accent-soft))!important;transform:translateY(-1px)}
+.ap-top strong,.au-agent strong,.rk-row strong{color:var(--sk-ink)!important}
+.ap-main p{color:var(--ls-text-2)!important}.ap-main .ap-meta,.au-agent p,.rk-row p{color:var(--ls-muted)!important}
+.au-agent.off{background:var(--ls-bad-bg)!important}
+.cp-role-grid>article{padding:16px 18px!important}
+.cp-role-grid h4{color:var(--sk-ink)!important;font-weight:650}
+.rv-reco{background:var(--ls-accent-soft)!important}.rv-cons{background:var(--ls-warn-bg)!important}
+.rv-warn{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important;border-radius:var(--ds-r-inset)!important}
+.au-r{border-radius:var(--ds-r-inset)!important}
+.au-r.ok{background:var(--ls-ok-bg)!important;color:var(--ls-ok)!important}.au-r.esc{background:var(--ls-warn-bg)!important;color:var(--ls-warn)!important}.au-r.no{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important}
+.tb-key{border-radius:var(--ds-r-inset)!important;background:var(--sk-ink)!important}
+.rk-col{background:var(--ds-inset)!important;border-radius:999px!important}
+.rk-seg.ok,.rk-legend .ok::before{background:var(--ls-ok-solid)!important}.rk-seg.esc,.rk-legend .esc::before{background:var(--ls-warn-solid)!important}.rk-seg.no,.rk-legend .no::before{background:var(--ls-bad-solid)!important}
+.rk-legend span::before{border-radius:50%!important}
+
+/* ---------- KPI tiles ---------- */
+.tb-stats{gap:18px!important}
+.tb-stat{transition:box-shadow .25s,transform .35s cubic-bezier(.2,.8,.2,1)!important}
+.tb-stat:hover{transform:translateY(-3px)!important;box-shadow:0 14px 34px -16px rgba(23,43,77,.28)!important}
+.tb-stat.hero:hover{box-shadow:0 26px 44px -22px rgba(23,43,77,.8)!important}
+.tb-stat-k{font-size:17px!important}
+.tb-stat strong{font-size:50px!important;font-weight:550!important;letter-spacing:-.045em!important}
+.tb-stat-s{font-size:13px!important;color:var(--ls-muted)!important}
+.tb-stat.hero .tb-stat-s{color:rgba(255,255,255,.82)!important}
+/* round arrow action: the ↗ glyph is drawn as LedgerSight's stroked arrow icon */
+.tb-go{position:relative;font-size:0!important;color:var(--sk-ink);border:1.5px solid var(--sk-ink)!important;transition:transform .3s cubic-bezier(.2,.8,.2,1),background .2s,color .2s!important}
+.tb-go::after{content:"";width:18px;height:18px;background:currentColor;transition:transform .3s var(--ls-spring);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M8 7h9v9'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M8 7h9v9'/%3E%3C/svg%3E") center/contain no-repeat}
+.tb-stat:hover .tb-go{transform:rotate(45deg)!important;background:var(--sk-ink)!important;color:var(--sk-card)!important}
+.tb-stat:hover .tb-go::after{transform:translate(2px,-2px)}
+.tb-stat.hero .tb-go{background:#fff!important;border-color:#fff!important;color:var(--sk-ink)!important}
+.tb-stat.hero:hover .tb-go{background:var(--ls-accent-soft)!important;color:var(--sk-ink)!important}
+
+/* ---------- buttons (rule 4) ---------- */
+.gov-button,.workspace-ready main button:not(.iconbtn):not(.side-toggle):not(.gov-close):not([class*="tb-seg"]),.workspace-ready .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--ds-h);box-sizing:border-box;border-radius:999px!important;font-family:inherit;font-size:13.5px!important;font-weight:650!important;letter-spacing:.005em;line-height:20px;
+  cursor:pointer;transition:transform .18s var(--ls-ease),box-shadow .2s,background .2s,color .2s,border-color .2s,filter .2s!important}
+.gov-button,.workspace-ready .btn:not(.secondary){background:var(--sk-grad)!important;border:0!important;color:#fff!important;padding:11px 22px!important;box-shadow:0 12px 24px -14px rgba(23,43,77,.7)!important}
+.gov-button:not(:disabled):hover,.workspace-ready .btn:not(.secondary):hover{filter:brightness(1.08);box-shadow:0 14px 28px -14px rgba(53,106,230,.75)!important}
+.gov-button.gov-secondary,.workspace-ready .btn.secondary,.workspace-ready main button.secondary{background:transparent!important;border:1px solid var(--sk-ink)!important;color:var(--sk-ink)!important;
+  padding:10px 20px!important;box-shadow:0 1px 2px rgba(23,43,77,.05)!important;filter:none}
+.gov-button.gov-secondary:not(:disabled):hover,.workspace-ready .btn.secondary:hover,.workspace-ready main button.secondary:not(:disabled):hover{background:var(--sk-ink)!important;color:var(--sk-card)!important;border-color:var(--sk-ink)!important}
+.gov-button:not(:disabled):hover,.workspace-ready main button:not(:disabled):not(.iconbtn):not(.side-toggle):not(.gov-close):hover,.workspace-ready .btn:hover{transform:translateY(-1px)}
+.gov-button:not(:disabled):active,.workspace-ready main button:not(:disabled):not(.iconbtn):not(.side-toggle):not(.gov-close):active,.workspace-ready .btn:active{transform:translateY(0) scale(.97)}
+.gov-button:disabled,.workspace-ready main button:disabled{filter:grayscale(.4) opacity(.55);box-shadow:none!important;cursor:not-allowed}
+/* compact buttons inside table rows and lists (34px) */
+.gov-table .gov-button,.gov-table button,.au-agent .gov-button,.rk-row .gov-button{min-height:var(--ds-h-sm)!important;padding:0 16px!important;font-size:13px!important}
+/* approve / reject (green / red outline) by their words, so no markup changes are needed */
+.gov-button.ok,.gov-button.approve{background:var(--ls-ok-solid)!important}
+.gov-button.no,.gov-button.danger,.gov-button.reject{background:transparent!important;border:1px solid var(--ls-bad)!important;color:var(--ls-bad)!important;box-shadow:none!important}
+.gov-close{border-radius:50%!important;width:var(--ds-h-sm);height:var(--ds-h-sm);transition:background .2s,transform .3s var(--ls-spring)}
+.gov-close:hover{background:var(--ds-inset)!important;transform:rotate(90deg)}
+.gov-back{display:inline-flex;align-items:center;gap:6px;transition:color .2s,transform .2s var(--ls-ease)}
+.gov-back:hover{transform:translateX(-2px)}
+.gov-actions{gap:8px!important;flex-wrap:wrap}
+/* segmented filter chips (pl-chip) */
+.tb-segs{background:none!important;box-shadow:none!important;padding:0!important;gap:8px!important;flex-wrap:wrap}
+.tb-seg{display:inline-flex;align-items:center;height:36px;box-sizing:border-box;padding:8px 14px!important;border-radius:999px!important;font-size:13px!important;font-weight:600!important;
+  background:var(--sk-card)!important;color:var(--ls-text-2)!important;border:1px solid transparent;box-shadow:0 1px 2px rgba(23,43,77,.05);
+  transition:transform .18s var(--ls-ease),background .2s,color .2s!important}
+.tb-seg:hover{transform:translateY(-1px);color:var(--sk-ink)!important}
+.tb-seg:active{transform:scale(.96)}
+.tb-seg.on{background:var(--sk-grad)!important;color:#fff!important}
+/* links */
+.tb a:not(.gov-button):not(.tb-stat):not(.tb-seg),.gov-panel a:not(.gov-button){color:var(--ls-accent)!important;font-weight:600;transition:color .2s}
+.tb a:not(.gov-button):not(.tb-stat):not(.tb-seg):hover,.gov-panel a:not(.gov-button):hover{text-decoration:underline;text-underline-offset:3px}
+summary{transition:color .2s}summary:hover{color:var(--ls-accent)}
+
+/* ---------- fields (rule 5) ---------- */
+.workspace-ready main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),.workspace-ready main select,.workspace-ready dialog input:not([type=checkbox]):not([type=radio]),.workspace-ready dialog select{
+  min-height:var(--ds-h);box-sizing:border-box;border:1px solid var(--ls-line-2)!important;border-radius:12px!important;background:var(--sk-card)!important;color:var(--ls-text)!important;
+  font:inherit;font-size:14px!important;padding:0 14px!important;box-shadow:0 1px 2px rgba(23,43,77,.05);transition:box-shadow .2s,border-color .2s}
+.workspace-ready main textarea,.workspace-ready dialog textarea{border:1px solid var(--ls-line-2)!important;border-radius:12px!important;padding:11px 14px!important;font:inherit;font-size:14px!important;
+  box-shadow:0 1px 2px rgba(23,43,77,.05);transition:box-shadow .2s,border-color .2s}
+.workspace-ready main input:focus,.workspace-ready main select:focus,.workspace-ready main textarea:focus,.workspace-ready dialog input:focus,.workspace-ready dialog select:focus,.workspace-ready dialog textarea:focus{
+  outline:none;border-color:var(--ls-accent)!important;box-shadow:var(--ls-ring)!important}
+.workspace-ready main input[type=search]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),.workspace-ready main input.tb-search:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]){
+  border-radius:999px!important;border:0!important;padding:0 18px!important;min-width:280px;height:var(--ds-h);box-shadow:0 1px 2px rgba(23,43,77,.05)}
+.workspace-ready main input[type=search]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):hover{box-shadow:var(--ls-ring)!important}
+.gov-table input:not([type=checkbox]),.gov-table select,.tb-num{min-height:var(--ds-h-sm)!important;border-radius:999px!important;font-size:13px!important}
+.workspace-ready main input[type=checkbox],.workspace-ready main input[type=radio]{accent-color:var(--ls-accent);width:18px;height:18px}
+.tb-form label{color:var(--sk-ink)!important;font-size:13.5px!important;font-weight:600!important}
+
+/* ---------- badges (rules 3 + 6) ---------- */
+.gov-pill{display:inline-flex!important;align-items:center;gap:6px;border-radius:999px!important;padding:2px 10px 2px 8px!important;line-height:20px;font-size:11px!important;font-weight:650!important;
+  letter-spacing:.02em!important;text-transform:uppercase;white-space:nowrap;background:var(--ds-inset)!important;color:var(--ls-text-2)!important;border:1px solid var(--ls-line)!important}
+.gov-pill .gov-dot{width:6px!important;height:6px!important;border-radius:50%!important;background:currentColor!important;flex:none;margin:0!important;opacity:.9}
+.gov-green{background:var(--ls-ok-bg)!important;color:var(--ls-ok)!important;border-color:var(--ls-ok-line)!important}
+.gov-amber{background:var(--ls-warn-bg)!important;color:var(--ls-warn)!important;border-color:var(--ls-warn-line)!important}
+.gov-rose,.gov-red{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important;border-color:var(--ls-bad-line)!important}
+.gov-neutral{background:var(--ds-inset)!important;color:var(--ls-muted)!important;border-color:var(--ls-line)!important}
+.gov-blue{background:var(--ls-accent-soft)!important;color:var(--ls-accent)!important;border-color:var(--ls-accent-line)!important}
+.tb-cell{border-radius:999px!important;padding:2px 10px!important}
+.tb-c-allow{background:var(--ls-ok-bg)!important;color:var(--ls-ok)!important}.tb-c-escalate{background:var(--ls-warn-bg)!important;color:var(--ls-warn)!important}.tb-c-deny{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important}
+.tb-dec{border-radius:var(--ds-r-inset)!important}
+.tb-allow{background:var(--ls-ok-bg)!important;color:var(--ls-ok)!important}.tb-esc{background:var(--ls-warn-bg)!important;color:var(--ls-warn)!important}.tb-deny{background:var(--ls-bad-bg)!important;color:var(--ls-bad)!important}
+.workspace-ready .tag{border-radius:999px!important}
+
+/* ---------- tables (rule 7) ---------- */
+.gov-table-wrap,.gov-panel>.gov-table-wrap{border:0!important;border-radius:0!important;box-shadow:none!important}
+.gov-panel .gov-table-wrap{padding:10px 14px 14px!important}
+.gov-table{border:0!important}
+.gov-table th{background:var(--sk-panel)!important;color:var(--ls-muted)!important;font-size:11.5px!important;letter-spacing:.06em!important;font-weight:600!important;padding:11px 14px!important}
+.gov-table td{padding:13px 14px!important;border-bottom:1px solid var(--ls-line)!important;color:var(--ls-text-2)!important;transition:background .15s}
+.gov-table tr:hover td{background:color-mix(in srgb,var(--ls-accent) 4%,transparent)!important}
+.gov-table td strong{color:var(--sk-ink)!important}
+.tb-feed li,.tb-status li{border-bottom:1px solid var(--ls-line)!important;color:var(--ls-text-2)!important;padding:12px 4px!important;border-radius:0;transition:background .15s}
+.tb-feed li:hover{background:color-mix(in srgb,var(--ls-accent) 4%,transparent)}
+.tb-feed li strong{color:var(--sk-ink)}
+.gov-code{font-family:var(--ls-mono)!important;font-size:12px!important}
+
+/* ---------- dialogs ---------- */
+.workspace-ready dialog{border:0!important;border-radius:28px!important;box-shadow:0 1px 2px rgba(23,43,77,.06),0 40px 80px -30px rgba(23,43,77,.45)!important;background:var(--sk-card)!important;color:var(--ls-text)}
+.workspace-ready dialog::backdrop{background:rgba(23,43,77,.28);backdrop-filter:blur(4px)}
+.workspace-ready dialog[open]{animation:lsPop .35s var(--ls-ease)}
+@keyframes lsPop{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+
+/* ---------- toast ---------- */
+.workspace-ready .toast{border-radius:999px!important;background:var(--sk-ink)!important;color:#fff!important;border:0!important;padding:12px 20px!important;font-weight:600;
+  box-shadow:0 18px 40px -18px rgba(23,43,77,.6)!important;animation:lsPop .3s var(--ls-ease)}
+
+/* ---------- page entrance (ui-plus.js): words rise from under their own clip line ---------- */
+.ls-w{display:inline-block;overflow:clip;overflow-clip-margin:.25em;vertical-align:baseline}
+.ls-wi{display:inline-block}
+.ls-wrun{display:inline}
+/* without Motion (or with reduced motion) the content still eases in, once */
+@media (prefers-reduced-motion:no-preference){
+  html:not(.has-motion) .workspace-ready main>*{animation:lsRise .45s var(--ls-ease) both}
+}
+@keyframes lsRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* Overview cards compact (as LedgerSight 62b0a87): four in one row down to 1000px, shorter cards, smaller figures */
+.tb-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:16px!important}
+.tb-stat{min-height:150px!important;padding:18px 20px!important;border-radius:20px!important}
+.tb-stat-k{font-size:14.5px!important}
+.tb-stat strong{font-size:clamp(28px,2.4vw,38px)!important}
+.tb-stat-s{padding-top:10px;margin-top:0!important;font-size:12.5px!important}
+.tb-go{width:34px!important;height:34px!important;border-width:1.25px!important}
+.tb-go::after{width:14px;height:14px}
+@media (max-width:1000px){.tb-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:560px){.tb-stats{grid-template-columns:1fr!important}}
+@media (max-width:760px){.workspace-ready .tb,.workspace-ready main>.gov:not(.tb){padding:20px 16px 96px!important}.gov-page-heading h2{font-size:30px!important}
+  .workspace-ready main input[type=search],.tb-search{min-width:0;width:100%}}
+@media print{.topbar{display:none!important}}
+
+/* ---------- Decisions / Evidence feed: five grouped columns that fit the card (no sideways scrolling) ---------- */
+.tb .gov-table:has(.dt-main){table-layout:fixed;width:100%}
+.tb .gov-table:has(.dt-main) th,.tb .gov-table:has(.dt-main) td{white-space:normal!important;min-width:0!important;max-width:none!important;overflow-wrap:anywhere!important;vertical-align:top}
+.tb .gov-table:has(.dt-main) th:nth-child(1){width:13%}
+.tb .gov-table:has(.dt-main) th:nth-child(2){width:19%}
+.tb .gov-table:has(.dt-main) th:nth-child(3){width:23%}
+.tb .gov-table:has(.dt-main) th:nth-child(4){width:18%}
+.tb .gov-table:has(.dt-main) th:nth-child(6){width:15%}
+.dt-main{display:block;color:var(--sk-ink);font-weight:500;line-height:1.4}
+strong.dt-main{font-weight:650}
+.dt-main.gov-code{font-size:12.5px!important;color:var(--sk-ink)!important}
+.dt-sub{display:block;margin-top:3px;font-size:12.5px;line-height:1.4;color:var(--ls-muted)}
+.dt-when .dt-main{font-variant-numeric:tabular-nums}
+.dt-dec .dt-main{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.dt-dec .dt-sub{margin-top:6px}
+.dt-why{color:var(--ls-text-2)!important;line-height:1.45}
+/* narrow screens: each decision becomes a small stacked card */
+@media (max-width:760px){
+  .tb .gov-table:has(.dt-main) thead{display:none}
+  .tb .gov-table:has(.dt-main),.tb .gov-table:has(.dt-main) tbody,.tb .gov-table:has(.dt-main) tr,.tb .gov-table:has(.dt-main) td{display:block;width:auto!important}
+  .tb .gov-table:has(.dt-main) tr{padding:10px 0;border-bottom:1px solid var(--ls-line)}
+  .tb .gov-table:has(.dt-main) td{border:0!important;padding:3px 4px!important}
+}
+/* Evidence adds a sixth column (record hash) */
+.tb .gov-table:has(.dt-main):has(th:nth-child(6)) th:nth-child(1){width:12%}
+.tb .gov-table:has(.dt-main):has(th:nth-child(6)) th:nth-child(2){width:16%}
+.tb .gov-table:has(.dt-main):has(th:nth-child(6)) th:nth-child(3){width:20%}
+.tb .gov-table:has(.dt-main):has(th:nth-child(6)) th:nth-child(4){width:16%}
+.tb .gov-table:has(.dt-main):has(th:nth-child(6)) th:nth-child(6){width:13%}
+/* a search pill sitting inside a white card takes the inset tint so it stays visible (rule 2) */
+.workspace-ready main .tb-card input[type=search]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]),
+.workspace-ready main .gov-panel input[type=search]:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]){background:var(--ds-inset)!important;box-shadow:none}

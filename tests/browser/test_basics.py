@@ -8,7 +8,25 @@ def test_opens_directly_and_uses_the_light_theme_even_in_a_dark_browser(as_user)
     page = as_user(None, "", scheme="dark")
     expect(page.get_by_role("heading", name="Overview", exact=True)).to_be_visible()
     assert page.get_by_role("button", name=re.compile(r"@t-bank|@t-health|@cloudseals")).count() == 0      # no seeded-user picker
-    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(250, 251, 253)"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(246, 248, 251)"   # LedgerSight v7 page #F6F8FB
+    assert page.errors == []
+
+
+def test_ledgersight_v7_shell_top_bar_rail_and_pill(as_user):
+    """LedgerSight design v7 shell: top bar (workspace, page, who), sliding menu pill, menu collapses to an icon rail."""
+    page = as_user("admin@t-bank", "decisions", width=1440)
+    expect(page.locator(".topbar .ws-pill")).to_contain_text("T-Bank")
+    expect(page.locator(".topbar .workspace-breadcrumb")).to_contain_text("Decisions")
+    expect(page.locator(".topbar .role-pill")).to_contain_text("Administrator")
+    assert page.locator("#nav > .nav-pill").count() == 1
+    page.get_by_role("button", name="Collapse menu").click()
+    expect(page.locator("body")).to_have_class(re.compile(r"\bside-mini\b"))
+    expect(page.get_by_role("link", name="Policies")).to_be_visible()            # icons stay usable in the rail
+    page.get_by_role("button", name="Expand menu").click()
+    expect(page.locator("body")).not_to_have_class(re.compile(r"\bside-mini\b"))
+    page.get_by_role("link", name="Risk").click()
+    expect(page.get_by_role("heading", name="Risk", exact=True)).to_be_visible()
+    expect(page.locator(".topbar .workspace-breadcrumb")).to_contain_text("Risk")
     assert page.errors == []
 
 
