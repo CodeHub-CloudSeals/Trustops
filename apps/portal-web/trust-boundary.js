@@ -130,10 +130,9 @@ export function registerTrustBoundary({ routes, main, el, api }) {
         el("thead", {}, el("tr", {}, ["Application", "Address", "Key", "Status", ""].map((h) => el("th", { scope: "col" }, h)))),
         el("tbody", {}, items.map(row))))
         : el("div", { class: "gov-empty" }, el("h3", {}, list ? "No applications yet" : "Applications unavailable"),
-            el("p", {}, list ? "Add your first application with its address and credentials." : "You may not have access to this page."),
+            el("p", {}, list ? "Add your first application. Give it a name and TrustOps creates its key." : "You may not have access to this page."),
             list?.can_manage ? el("a", { class: "gov-button", href: "#/add-application" }, "+ Add application") : "")),
-      msg,
-      el("p", { class: "tb-sub" }, `Built-in sandbox: ${ops?.connector_status === "mock_only" ? "Mock SAP (synthetic, for demos only)" : "none"}.`)));
+      msg));
   };
 
   const showKey = (app) => {
