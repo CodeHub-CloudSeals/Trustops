@@ -68,8 +68,8 @@ export function registerGovernanceTeam({routes,main,el,api,state,toast}) {
       });
     }
     function revoke(member) {
-      modal("Revoke workspace access?",d=>el("div",{},el("p",{},`${member.email} will lose TrustOps access to this customer workspace. Their previous policy and review history is retained.`),
-        el("div",{class:"gov-dialog-actions"},button("Cancel",()=>d.close()),button("Revoke access",async()=>{await api(`${base}/members/${encodeURIComponent(member.sub)}/revoke`,{method:"POST",body:{revision:member.revision}});d.close();toast("Workspace access revoked");await reload();},true))));
+      modal("Remove team member?",d=>el("div",{},el("p",{},`${member.email} will be removed. They lose access to TrustOps and to every connected application (for example LedgerSight) at their next request. What they did before stays in the evidence record.`),
+        el("div",{class:"gov-dialog-actions"},button("Cancel",()=>d.close()),button("Remove",async()=>{await api(`${base}/members/${encodeURIComponent(member.sub)}/revoke`,{method:"POST",body:{revision:member.revision}});d.close();toast("Team member removed");await reload();},true))));
     }
     async function previewAs(member) {
       const users=await fetch("/v1/dev/users").then(r=>r.json());
@@ -79,9 +79,9 @@ export function registerGovernanceTeam({routes,main,el,api,state,toast}) {
     }
     const rows=data.members.map(m=>el("tr",{},el("td",{},el("strong",{},m.email),m.sub===data.actor?el("p",{},"You"):""),
       el("td",{},m.role_labels.join(", ")),el("td",{},accessText(m.app_access,m.roles)),el("td",{},el("span",{class:"gov-pill gov-green"},"Active")),
-      el("td",{},m.staff?el("span",{class:"cp-form-note"},"Managed by CloudSeals"):el("div",{class:"gov-actions"},button("Change access",()=>changeRole(m)),m.sub!==data.actor?button("Revoke",()=>revoke(m)):"",data.local_preview&&m.sub!==data.actor?button("Preview as",()=>previewAs(m)):""))));
+      el("td",{},m.staff?el("span",{class:"cp-form-note"},"Managed by CloudSeals"):el("div",{class:"gov-actions"},button("Change access",()=>changeRole(m)),m.sub!==data.actor?button("Remove",()=>revoke(m)):"",data.local_preview&&m.sub!==data.actor?button("Preview as",()=>previewAs(m)):""))));
     const pending=data.pending.map(p=>el("tr",{},el("td",{},p.email),el("td",{},p.role_labels.join(", ")),el("td",{},accessText(p.app_access,p.roles)),el("td",{},p.roles.includes("customer_app_user")?"Ready: signs in to the application":"Pending first sign-in"),
-      el("td",{},el("div",{class:"gov-actions"},button("Change access",()=>changePending(p)),data.local_preview?button("Activate local preview",async()=>{await api(base+"/preview-activate",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Local preview membership activated with the registered role");await reload();}):"User signs in with verified work email",button("Cancel registration",async()=>{await api(base+"/pending/cancel",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Pending registration cancelled");await reload();})))));
+      el("td",{},el("div",{class:"gov-actions"},button("Change access",()=>changePending(p)),data.local_preview?button("Activate local preview",async()=>{await api(base+"/preview-activate",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Local preview membership activated with the registered role");await reload();}):"User signs in with verified work email",button("Remove",async()=>{if(!confirm(`Remove ${p.email}? They lose access to TrustOps and connected applications.`))return;await api(base+"/pending/cancel",{method:"POST",body:{email:p.email,role:"viewer"}});toast("Team member removed");await reload();})))));
     const root=el("div",{class:"gov"},
       el("header",{class:"gov-page-heading"},el("div",{},el("span",{class:"gov-kicker"},"SETTINGS"),el("h2",{},"Team & access"),el("p",{},"Who can change TrustOps, who approves, and who can only look.")),button("Add user",addUser,true)),
       el("section",{class:"gov-panel cp-workspace"},el("div",{class:"gov-panel-head"},el("div",{},el("h3",{},"Roles"),el("p",{},"Approvals happen in TrustOps → Approvals. People who submit work in an application do not need a TrustOps login."))),
