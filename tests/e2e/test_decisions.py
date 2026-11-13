@@ -335,3 +335,27 @@ def test_application_access_follows_the_trustops_role(env, public_dns):
         assert c.post(base + "/invites", headers=h("admin@t-bank"), json={"email": email, "role": role}).status_code == 201
     look = lambda e: c.get("/v1/app-access", params={"email": e}, headers={"X-TrustOps-Key": key}).json()["role"]
     assert look("p@firm.test") == "preparer" and look("a@firm.test") == "reviewer" and look("v@firm.test") is None
+
+
+def test_assign_review_to_a_named_approver(env, public_dns):
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    revs = c.get("/v1/reviewers", headers={"X-TrustOps-Key": key}).json()["items"]
+    emails = {r["email"] for r in revs}
+    assert revs and all(r["role"] in ("Admin", "Approver") for r in revs)
+    approver = next(r["email"] for r in revs if r["role"] == "Approver")
+    assert c.get("/v1/reviewers", headers={"X-TrustOps-Key": "tok_wrong"}).status_code == 401
+    # Assigned when submitted; a person who is not an approver is refused
+    bad = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={"actor": {"type": "human", "id": "prep@x"}, "action": "submit_for_review", "assign_to": "nobody@x.com"})
+    assert bad.status_code == 422
+    did = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={"actor": {"type": "human", "id": "prep@x"}, "action": "submit_for_review", "assign_to": approver}).json()["decision_id"]
+    assert c.get(f"/v1/decisions/{did}/status", headers={"X-TrustOps-Key": key}).json()["assigned_to"] == approver
+    # Reassign from the application and from the console; the evidence chain stays intact
+    other = next(e for e in emails if e != approver)
+    assert c.post(f"/v1/decisions/{did}/app-assign", headers={"X-TrustOps-Key": key}, json={"to": other, "by": "prep@x"}).json()["assigned_to"] == other
+    assert c.post(f"/v1/decisions/{did}/assign", headers=h("risk@t-bank"), json={"to": approver}).status_code == 403
+    assert c.post(f"/v1/decisions/{did}/assign", headers=h("admin@t-bank"), json={"to": None}).json()["assigned_to"] is None
+    rec = c.get(f"/v1/decisions/{did}", headers=h("admin@t-bank")).json()
+    assert len(rec["assignment"]["history"]) == 2
+    assert c.get("/v1/decisions-verify", headers=h("admin@t-bank")).json()["valid"]
+    assert {r["email"] for r in c.get("/v1/decisions-reviewers", headers=h("risk@t-bank")).json()["items"]} == emails

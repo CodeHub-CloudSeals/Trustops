@@ -65,6 +65,10 @@ def _err(status, code, message):
     return HTTPException(status, {"code": code, "message": message})
 
 
+# Fields that change after a record is written (who resolved it, details loaded later, who it is assigned to).
+UNHASHED = ("record_hash", "resolution", "loaded_details", "assignment")
+
+
 def digest(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -96,7 +100,7 @@ class DecisionStore:
             record["tenant_id"] = tenant
             record["previous_hash"] = mine[-1]["record_hash"] if mine else "0" * 64
             record["sequence"] = len(mine) + 1
-            record["record_hash"] = digest({k: v for k, v in record.items() if k not in ("record_hash", "resolution", "loaded_details")})
+            record["record_hash"] = digest({k: v for k, v in record.items() if k not in UNHASHED})
             self.state.decisions.append(record)
         return dict(record)
 
@@ -203,7 +207,7 @@ def evaluate(rules, actor_type, action, amount_minor):
 def verify_chain(records):
     prev = "0" * 64
     for i, r in enumerate(records, 1):
-        expected = digest({k: v for k, v in r.items() if k not in ("record_hash", "resolution", "loaded_details")})
+        expected = digest({k: v for k, v in r.items() if k not in UNHASHED})
         if r["previous_hash"] != prev or r["record_hash"] != expected or r["sequence"] != i:
             return {"valid": False, "checked": i, "broken_at": r["id"]}
         prev = r["record_hash"]
@@ -325,7 +329,7 @@ def _public(r):
     return r
 
 
-def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None):
+def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None, reviewers=None):
     router = APIRouter(tags=["Decisions"])
     db = store or DecisionStore(state)
 
@@ -360,6 +364,8 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                "details": details,
                "decision": decision, "policy_id": policy, "reason": reason,
                "simulated": simulated, "requested_by": by}
+        if decision == "ESCALATE":
+            rec["assignment"] = {"to": check_reviewer(tenant, body.get("assign_to")), "by": by or f"{application['name']}", "at": time.time(), "history": []}
         rec = db.append(tenant, rec)
         if ident:
             db.count_agent(ident["id"], decision)
@@ -367,7 +373,44 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                 "status": "pending_approval" if decision == "ESCALATE" else "final",
                 "evidence_hash": rec["record_hash"], "evidence_sequence": rec["sequence"]}
 
+    def reviewer_list(tenant):
+        return reviewers(tenant) if reviewers else []
+
+    def check_reviewer(tenant, email):
+        email = (str(email or "")).strip().lower() or None
+        if email and email not in {r["email"] for r in reviewer_list(tenant)}:
+            raise _err(422, "not_a_reviewer", "This person is not an Admin or Approver in TrustOps")
+        return email
+
+    def assign(tenant, did, to, by, app_id=None):
+        r = db.get(tenant, did)
+        if not r or (app_id and r["application"]["id"] != app_id):
+            raise _err(404, "not_found", "Decision not found")
+        if r["decision"] != "ESCALATE" or r.get("resolution"):
+            raise _err(409, "not_pending", "This item is no longer waiting for review")
+        to = check_reviewer(tenant, to)
+        prev = r.get("assignment") or {"history": []}
+        r["assignment"] = {"to": to, "by": by, "at": time.time(),
+                           "history": (prev.get("history") or []) + ([{k: prev.get(k) for k in ("to", "by", "at")}] if "at" in prev else [])}
+        db.update(tenant, r)
+        return {"decision_id": did, "assigned_to": to}
+
     # ---- applications call this ----
+    @router.get("/v1/reviewers")
+    def app_reviewers(x_trustops_key: Optional[str] = Header(default=None)):
+        found = find_integration_by_key(x_trustops_key or "")
+        if not found:
+            raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
+        return {"items": reviewer_list(found[0])}
+
+    @router.post("/v1/decisions/{did}/app-assign")
+    def app_assign(did: str, body: dict = Body(...), x_trustops_key: Optional[str] = Header(default=None)):
+        found = find_integration_by_key(x_trustops_key or "")
+        if not found:
+            raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
+        by = str(body.get("by") or found[1]["name"])[:200]
+        return assign(found[0], did, body.get("to"), by, app_id=found[1]["id"])
+
     @router.post("/v1/decisions")
     def app_decision(body: dict = Body(...), x_trustops_key: Optional[str] = Header(default=None)):
         found = find_integration_by_key(x_trustops_key or "")
@@ -388,7 +431,8 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         return {"decision_id": did, "decision": r["decision"], "policy_id": r["policy_id"],
                 "final": ({"approve": "APPROVED", "reject": "REJECTED"}[res["outcome"]] if res else ("PENDING" if r["decision"] == "ESCALATE" else r["decision"])),
                 "resolved_by": res["by"] if res else None, "resolved_at": res["at"] if res else None,
-                "resolution_reason": res["reason"] if res else None}
+                "resolution_reason": res["reason"] if res else None,
+                "assigned_to": (r.get("assignment") or {}).get("to")}
 
     # ---- console ----
     @router.post("/v1/decisions/simulate")
@@ -426,6 +470,19 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if not r:
             raise _err(404, "not_found", "Decision not found")
         return r
+
+    @router.get("/v1/decisions-reviewers")
+    def console_reviewers(p=Depends(principal)):
+        need(p, READ)
+        return {"items": reviewer_list(p.tenant_id)}
+
+    @router.post("/v1/decisions/{did}/assign")
+    def console_assign(did: str, body: dict = Body(...), p=Depends(principal)):
+        need(p, APPROVERS, "Only an approver or administrator can assign reviews")
+        out = assign(p.tenant_id, did, body.get("to"), identity(p) if identity else p.sub)
+        if audit:
+            audit(p, "decision.assign", did)
+        return out
 
     @router.post("/v1/decisions/{did}/resolve")
     def resolve(did: str, body: dict = Body(...), p=Depends(principal)):

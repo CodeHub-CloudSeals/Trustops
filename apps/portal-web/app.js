@@ -1,4 +1,4 @@
-import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13a";
+import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13c";
 import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13i";
 import { registerApplications } from "./applications.js?v=access-2026-11-13c";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).

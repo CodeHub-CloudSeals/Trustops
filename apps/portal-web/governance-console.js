@@ -59,7 +59,8 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
   // ---------- Approvals: escalated decisions + governed runs ----------
   const runsApprovals = routes.approvals;
   routes.approvals = async () => {
-    const [d] = await Promise.all([safe(api("/v1/decisions?pending=true"))]);
+    const [d, me] = await Promise.all([safe(api("/v1/decisions?pending=true")), safe(api("/v1/me"))]);
+    const myEmail = (me?.email || me?.sub || "").toLowerCase();
     await runsApprovals();
     const m = msgEl();
     const resolve = (r, outcome) => async () => {
@@ -68,16 +69,24 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
       try { await api(`/v1/decisions/${r.id}/resolve`, { method: "POST", body: { outcome, reason } }); await routes.approvals(); }
       catch (e) { say(m, e.message, false); }
     };
-    const items = d?.items || [];
+    const all = d?.items || [];
+    const mineOnly = sessionStorage.getItem("ap-mine") === "1";
+    const assignee = (r) => r.assignment?.to || null;
+    const items = mineOnly ? all.filter((r) => assignee(r) === myEmail) : all;
+    const mineCount = all.filter((r) => assignee(r) === myEmail).length;
+    const tab = (label, on, val) => el("button", { type: "button", class: `gov-button${on ? "" : " gov-secondary"}`,
+      onclick: () => { sessionStorage.setItem("ap-mine", val); routes.approvals(); } }, label);
     const item = (r) => el("li", { class: "ap-item" },
       el("div", { class: "ap-main" },
         el("div", { class: "ap-top" }, el("strong", {}, r.details?.title || r.action.replaceAll("_", " ")), pill(r.policy_id, "amber"), r.amount_minor != null ? el("span", { class: "ap-amt" }, money(r)) : ""),
         r.details?.summary ? el("p", {}, r.details.summary) : "",
+        el("p", { class: "ap-meta" }, el("strong", {}, "Reviewer: "), assignee(r) ? (assignee(r) === myEmail ? `${assignee(r)} (you)` : assignee(r)) : "Any approver"),
         el("p", { class: "ap-meta" }, `${r.application.name} · submitted by ${r.actor.type === "agent" ? "agent " : ""}${r.actor.id}${r.client ? ` · ${r.client}` : ""} · ${at(r.at)} · ${r.reason}`),
         r.details?.link ? el("a", { href: r.details.link, target: "_blank", rel: "noopener noreferrer" }, `Open in ${r.application.name} ↗`) : ""),
       el("a", { class: "gov-button", href: `#/approval/${r.id}` }, "Review →"));
     const section = card(`Waiting for your approval (${items.length})`, "Items your applications sent to TrustOps. Open each one, check what is in it, then approve or reject. The application picks up the result.",
-      items.length ? el("ul", { class: "ap-list" }, items.map(item)) : el("p", { class: "tb-sub" }, "Nothing is waiting."), m);
+      el("div", { class: "gov-actions" }, tab(`All (${all.length})`, !mineOnly, "0"), tab(`Assigned to me (${mineCount})`, mineOnly, "1")),
+      items.length ? el("ul", { class: "ap-list" }, items.map(item)) : el("p", { class: "tb-sub" }, mineOnly ? "Nothing is assigned to you." : "Nothing is waiting."), m);
     const root = main.querySelector(".tb");
     root?.querySelector(".gov-page-heading")?.after(section);
     const runCard = root?.querySelectorAll(".tb-card")[1];
@@ -86,7 +95,7 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
 
   // ---------- Review one escalated item ----------
   routes.approval = async (did) => {
-    const r = await api(`/v1/decisions/${encodeURIComponent(did)}`);
+    const [r, revs] = await Promise.all([api(`/v1/decisions/${encodeURIComponent(did)}`), safe(api("/v1/decisions-reviewers"))]);
     const ld = r.loaded_details;
     const d = { ...(r.details || {}) };
     if (ld) for (const k of ["title", "summary", "compare", "lines", "recommendation", "consequence", "link"]) if (ld[k]) d[k] = ld[k];
@@ -111,6 +120,12 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
     };
     approveBtn.addEventListener("click", decide("approve"));
     const pending = r.decision === "ESCALATE" && !r.resolution;
+    const am = msgEl();
+    const assignSel = el("select", { id: "ap-assign", "aria-label": "Reviewer", onchange: async () => {
+      try { await api(`/v1/decisions/${r.id}/assign`, { method: "POST", body: { to: assignSel.value || null } }); say(am, "Reviewer updated.", true); }
+      catch (e) { say(am, e.message, false); } } },
+      el("option", { value: "" }, "Any approver"),
+      (revs?.items || []).map((x) => el("option", { value: x.email, selected: r.assignment?.to === x.email }, `${x.email} · ${x.role}`)));
     const fact = (label, value) => el("div", { class: "rv-fact" }, el("span", {}, label), el("strong", {}, value ?? "–"));
     const norm = (v) => String(v || "").replace(/[\s,]/g, "").toLowerCase();
     const compare = d.compare ? el("section", { class: "tb-card" }, el("h3", {}, "Side by side"),
@@ -141,9 +156,12 @@ export function registerGovernanceConsole({ routes, main, el, api }) {
         el("div", { class: "rv-facts" },
           fact("Application", r.application.name), fact("Submitted by", `${r.actor.type}: ${r.actor.id}`),
           fact("Action", r.action), fact("Client", r.client), fact("Amount", money(r)), fact("Submitted", at(r.at)),
-          fact("Why it is here", `${r.policy_id} — ${r.reason}`), fact("Evidence record", `#${r.sequence} ${r.record_hash.slice(0, 12)}…`))),
+          fact("Why it is here", `${r.policy_id} — ${r.reason}`), fact("Evidence record", `#${r.sequence} ${r.record_hash.slice(0, 12)}…`),
+          pending ? "" : fact("Reviewer", r.assignment?.to || "Any approver")),
+        pending ? el("div", { class: "tb-form" }, el("label", { for: "ap-assign" }, "Reviewer"), assignSel,
+          el("p", { class: "tb-sub" }, r.assignment?.by ? `Assigned by ${r.assignment.by} · ${at(r.assignment.at)}` : "Any Admin or Approver can review this."), am) : ""),
       pending ? el("section", { class: "tb-card tb-step" }, el("h3", {}, "Your decision"),
-        el("p", { class: "tb-sub" }, "What you saw here is recorded in the evidence chain with your decision. You cannot approve an item you submitted."),
+        el("p", { class: "tb-sub" }, "What you saw here is recorded in the evidence chain with your decision. Approvers cannot approve items they submitted; an administrator approving their own item is recorded as a self-approval."),
         !hasDetails && d.link ? el("label", { class: "rv-check", for: "ap-checked" }, checked, ` I opened this item in ${r.application.name} and checked it`) : "",
         el("div", { class: "tb-form" }, reason),
         el("div", { class: "gov-actions" }, approveBtn,

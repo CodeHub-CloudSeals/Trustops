@@ -216,9 +216,29 @@ _INTEGRATIONS = _integrations_router(console_principal, audit, identity=lambda p
 app.include_router(_INTEGRATIONS)
 app.include_router(_decisions_router(console_principal, _INTEGRATIONS.store.find_by_key, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE,
                                     tenant_name=lambda t: (STORE.tenants.get(t) or {}).get("name") or t,
-                                    integrations=_INTEGRATIONS.store))
+                                    integrations=_INTEGRATIONS.store, reviewers=lambda t: _reviewers(t)))
 app.include_router(make_team_router(console_principal, STORE, lambda: persist.save(STORE) if persist.enabled() else None,
                                    list_apps=lambda t: _INTEGRATIONS.store.list(t) if t else []))
+
+
+def _reviewers(tenant: str) -> list[dict]:
+    """People who can approve in this workspace (Admins and Approvers), for assigning reviews."""
+    out = {}
+    with STORE.lock:
+        for sub, u in STORE.users.items():
+            roles = set(u.get("roles", []))
+            staff = u.get("tenant_id") is None and "cloudseals_admin" in roles and tenant == ORG_TENANT
+            if (u.get("tenant_id") == tenant and roles & {"customer_admin", "customer_controller"}) or staff:
+                email = (u.get("email") or sub).lower()
+                if email:
+                    out[email] = {"email": email, "name": u.get("name") or email.split("@")[0],
+                                  "role": "Admin" if staff or "customer_admin" in roles else "Approver", "signed_in": True}
+        for email, u in STORE.pending_users.items():
+            roles = set(u.get("roles", []))
+            if u.get("tenant_id") == tenant and roles & {"customer_admin", "customer_controller"} and email.lower() not in out:
+                out[email.lower()] = {"email": email.lower(), "name": email.split("@")[0],
+                                      "role": "Admin" if "customer_admin" in roles else "Approver", "signed_in": False}
+    return sorted(out.values(), key=lambda r: (r["role"] != "Admin", r["email"]))
 
 
 @app.get("/v1/app-access")
