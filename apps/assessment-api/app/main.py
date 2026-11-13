@@ -215,9 +215,38 @@ def audit(p: Principal, action: str, ref: str) -> None:
 app.include_router(_ledgersight_router(principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub))
 _INTEGRATIONS = _integrations_router(console_principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE)
 app.include_router(_INTEGRATIONS)
+class _DecisionFiles:
+    """Files approvers attach to items in TrustOps: the same checks as assessment evidence (type and content
+    inspection, ClamAV when configured: no verdict means no file), kept in the evidence object store."""
+    MAGIC = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
+
+    def available(self):
+        return not hasattr(OBJECTS, "promote")      # the S3 path needs the GuardDuty quarantine flow; not wired for attachments yet
+
+    def check(self, content_type, data):
+        if content_type in self.MAGIC and not data.startswith(self.MAGIC[content_type]):
+            return {"state": "rejected", "reason": "magic_mismatch"}
+        verdict = inspect(content_type, data, hashlib.sha256(data).hexdigest(), len(data))
+        av = scanner.from_env()
+        if verdict["state"] == "clean" and av is not None:
+            try:
+                is_clean, detail = av.scan(data)
+            except scanner.ScannerError:
+                return {"state": "rejected", "reason": "malware_scanner_unavailable"}
+            if not is_clean:
+                return {"state": "infected", "reason": f"malware_detected: {detail}"[:120]}
+        return verdict
+
+    def put(self, tenant, fid, data):
+        OBJECTS.put(tenant, "evidence", fid, data)
+
+    def get(self, tenant, fid):
+        return OBJECTS.get(tenant, "evidence", fid)
+
+
 app.include_router(_decisions_router(console_principal, _INTEGRATIONS.store.find_by_key, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub, state=STORE,
                                     tenant_name=lambda t: (STORE.tenants.get(t) or {}).get("name") or t,
-                                    integrations=_INTEGRATIONS.store, reviewers=lambda t: _reviewers(t)))
+                                    integrations=_INTEGRATIONS.store, reviewers=lambda t: _reviewers(t), files=_DecisionFiles()))
 app.include_router(make_team_router(console_principal, STORE, lambda: persist.save(STORE) if persist.enabled() else None,
                                    list_apps=lambda t: _INTEGRATIONS.store.list(t) if t else []))
 

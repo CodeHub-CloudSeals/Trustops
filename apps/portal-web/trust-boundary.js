@@ -1,6 +1,8 @@
 // Trust-boundary information architecture: AI reasoning → TrustOps boundary → enterprise execution,
 // with the evidence fabric and workflow packs underneath. Every status shown here comes from a live API;
 // anything the runtime does not do yet is labelled "Planned" or "Not connected", never implied.
+import { overviewCharts } from "./overview-charts.js?v=oc-2026-11-13c";
+
 export function registerTrustBoundary({ routes, main, el, api }) {
   const safe = (p) => p.catch(() => null);
   const pill = (text, tone = "neutral") => el("span", { class: `gov-pill gov-${tone}` }, el("span", { class: "gov-dot" }), text);
@@ -11,7 +13,8 @@ export function registerTrustBoundary({ routes, main, el, api }) {
   const loadOps = () => safe(api("/v1/agentops"));
 
   routes.dashboard = async () => {
-    const [ops, st, dec, apps] = await Promise.all([loadOps(), safe(api("/v1/decisions-stats")), safe(api("/v1/decisions?limit=8")), safe(api("/v1/integrations"))]);
+    const [ops, st, dec, apps, ins] = await Promise.all([loadOps(), safe(api("/v1/decisions-stats")), safe(api("/v1/decisions?limit=8")), safe(api("/v1/integrations")),
+      safe(api("/v1/decisions-insights"))]);
     const q = (n, label, href, sub, hero) => el("a", { class: `tb-stat${hero ? " hero" : ""}`, href },
       el("div", { class: "tb-stat-top" }, el("span", { class: "tb-stat-k" }, label), el("span", { class: "tb-go", "aria-hidden": "true" }, "↗")),
       el("strong", {}, String(n ?? "–")), el("span", { class: "tb-stat-s" }, sub));
@@ -26,6 +29,7 @@ export function registerTrustBoundary({ routes, main, el, api }) {
         q(st?.counts?.DENY, "Denied", "#/decisions/deny", "blocked by policy"),
         q(st?.total, "Decisions", "#/decisions", `${st?.counts?.ESCALATE ?? 0} escalated`),
         q(appsN, "Applications", "#/connected-systems", appsN ? `${apps.items.filter((a) => a.status === "connected").length} reachable` : "none connected yet")),
+      ins && ins.total ? overviewCharts(el, ins) : "",   // 2026-11-13: round charts of the decision records
       el("div", { class: "tb-two" },
         card("Recent decisions", "Latest across all applications", recent.length ? el("ul", { class: "tb-feed" }, recent.map((r) => el("li", {},
           el("span", {}, el("strong", {}, r.action), ` · ${r.actor.id} · ${r.application.name}`), pill(r.decision, tone[r.decision]))))

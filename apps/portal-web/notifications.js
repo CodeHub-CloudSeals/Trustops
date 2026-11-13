@@ -5,7 +5,7 @@
 // server per person, so it is the same in every browser. Opening the list marks it as seen.
 export function registerNotifications({ el, api, toast, state }) {
   const ICON = {
-    SUBMITTED: "M22 2L11 13M22 2l-7 20-4-9-9-4z", ESCALATED: "M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
+    SUBMITTED: "M22 2L11 13M22 2l-7 20-4-9-9-4z", RESUBMITTED: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7", ESCALATED: "M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
     APPROVED: "M5 12.5l4.5 4.5L19 7.5", REJECTED: "M7 7l10 10M17 7L7 17", DENIED: "M12 3l8 3v6c0 4.6-3.4 8.3-8 9-4.6-.7-8-4.4-8-9V6zM9 9l6 6M15 9l-6 6",
   };
   const svg = (d, cls) => {
@@ -19,6 +19,7 @@ export function registerNotifications({ el, api, toast, state }) {
   function text(it) {
     const t = `“${it.title}”`;
     if (it.kind === "SUBMITTED") return `${who(it)} sent ${t} from ${it.application} for approval`;
+    if (it.kind === "RESUBMITTED") return `${who(it)} sent ${t} again after a rejection, with new proof`;
     if (it.kind === "ESCALATED") return `${who(it)} needs a person: ${it.action}${money(it) ? " · " + money(it) : ""}`;
     if (it.kind === "APPROVED") return `${who(it)} approved ${t}`;
     if (it.kind === "REJECTED") return `${who(it)} rejected ${t}`;
@@ -61,7 +62,7 @@ export function registerNotifications({ el, api, toast, state }) {
         el("div", { class: "np-b" }, el("div", { class: "np-t" }, text(it)),
           it.note ? el("div", { class: "np-note" }, it.kind === "APPROVED" || it.kind === "REJECTED" ? `“${it.note}”` : it.note) : "",
           el("div", { class: "np-m" }, [when(it.at), it.times > 1 ? `${it.times} times` : "", it.policy_id, it.for_me && it.pending ? "assigned to you" : "",
-            it.pending && (it.kind === "SUBMITTED" || it.kind === "ESCALATED") ? "waiting" : ""].filter(Boolean).join(" · "))),
+            it.pending && (it.kind === "SUBMITTED" || it.kind === "RESUBMITTED" || it.kind === "ESCALATED") ? "waiting" : ""].filter(Boolean).join(" · "))),
         it.unread ? el("i", { class: "np-dot", "aria-label": "new" }) : "")))
       : el("div", { class: "np-empty" }, el("b", {}, "Nothing yet"),
         el("span", {}, n.for === "approver" ? "When an application sends an item for approval, or someone decides one, it shows up here."

@@ -400,3 +400,124 @@ def test_notifications_bell_follows_the_decision_log(env, public_dns):
     assert c.get("/v1/notifications", headers=h("controller2@t-bank")).json()["unread"] > 0   # seen is per person
     assert c.post("/v1/notifications/seen", headers=h("controller@t-bank"), json={"upto": "x"}).status_code == 422
     assert c.get("/v1/notifications", headers=h("admin@t-health")).json()["items"] == []     # tenant isolation
+
+
+def test_trusttwin_answers_from_the_records_and_never_changes_anything(env, public_dns):
+    """TrustTwin (the console assistant, 2026-11-13): read-only, answers built from this workspace's decision records,
+    lists the records it used, refuses to approve or change anything, and sees only its own workspace."""
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    sent = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
+        "actor": {"type": "human", "id": "staff@firm.example"}, "action": "submit_for_review", "client": "client-a",
+        "amount_minor": 50_000, "currency": "USD", "title": "Missing receipt EX-005", "facts": [{"label": "Bank line", "value": "500.00"}]}).json()
+    ask(c, key, actor_id="agent:recon", action="email_client")                     # blocked by FIN-02
+    q = lambda who, text: c.post("/v1/assistant/ask", headers=h(who), json={"question": text}).json()
+
+    w = q("admin@t-bank", "What is waiting for approval?")
+    assert w["status"] == "ANSWERED" and w["answer"].startswith("1 item is waiting")
+    assert w["rows"][0][0] == "Missing receipt EX-005" and w["links"][0] == f"#/approval/{sent['decision_id']}"
+    assert w["citations"][0]["ref"] == sent["decision_id"] and len(w["citations"][0]["sha256"]) == 64
+
+    b = q("admin@t-bank", "what was blocked today?")
+    assert b["status"] == "ANSWERED" and "FIN-02" in b["answer"] and "Agent recon" in b["answer"] and "agent:recon" not in b["answer"]
+
+    one = q("risk@t-bank", f"explain {sent['decision_id']}")
+    assert "ESCALATE under FIN-00" in one["answer"] and "still waiting" in one["answer"]
+    assert "FIN-04" in q("admin@t-bank", "What does FIN-04 do?")["answer"]
+    assert q("admin@t-bank", "Is the evidence chain intact?")["answer"].startswith("Yes.")
+    assert "EX-005" in q("admin@t-bank", "Tell me about EX-005")["rows"][0][0]
+
+    # read-only: a request to act is refused and nothing changes
+    r = q("controller@t-bank", f"approve {sent['decision_id']}")
+    assert r["status"] == "REFUSED" and "Approvals" in r["answer"]
+    assert c.get(f"/v1/decisions/{sent['decision_id']}", headers=h("admin@t-bank")).json().get("resolution") is None
+    assert q("admin@t-bank", "please disable FIN-04")["status"] == "REFUSED"
+    assert all(x["enabled"] for x in c.get("/v1/policies", headers=h("admin@t-bank")).json()["rules"] if x["id"] == "FIN-04")
+
+    # approvals made in the console show up in its answers
+    c.post(f"/v1/decisions/{sent['decision_id']}/resolve", headers=h("controller@t-bank"), json={"outcome": "reject", "reason": "No receipt"})
+    d = q("admin@t-bank", "What was rejected?")
+    assert d["answer"].startswith("0 approved and 1 rejected") and d["rows"][0][2] == "controller@t-bank" and d["rows"][0][3] == "No receipt"
+    assert q("admin@t-bank", "What is waiting for approval?")["answer"].startswith("Nothing is waiting")
+    assert "not an approver" in q("risk@t-bank", "What is assigned to me?")["answer"]
+    assert q("admin@t-bank", "what's the weather")["status"] == "NO_MATCH"
+
+    # other workspaces see none of it; whoever may read the decision pages may ask (same rule); a question is required
+    assert q("admin@t-health", "What was blocked recently?")["answer"].startswith("Nothing was blocked")
+    for who in ("architect@cloudseals", "contrib@t-bank"):
+        assert c.post("/v1/assistant/ask", headers=h(who), json={"question": "summary"}).status_code ==             c.get("/v1/decisions-stats", headers=h(who)).status_code
+    assert c.post("/v1/assistant/ask", headers=h("admin@t-bank"), json={"question": "  "}).status_code == 422
+    assert c.get("/v1/assistant/suggestions", headers=h("risk@t-bank")).json()["name"] == "TrustTwin"
+
+
+def test_approver_uploads_supporting_files_to_an_item_waiting_for_them(env, public_dns):
+    """2026-11-13 action items ("Upload button for reviewers in TrustOps"): approvers attach checked files to a
+    waiting item; the hash chain still verifies; viewers can download but not upload; decided items take no files."""
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    did = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
+        "actor": {"type": "human", "id": "staff@firm.example"}, "action": "submit_for_review", "client": "client-a",
+        "amount_minor": 50_000, "currency": "USD", "title": "Missing receipt EX-005", "facts": [{"label": "Bank line", "value": "500.00"}]}).json()["decision_id"]
+    up = lambda who, name, data, ctype: c.post(f"/v1/decisions/{did}/attachments?filename={name}", content=data,
+                                              headers={**h(who), "Content-Type": ctype})
+    pdf = b"%PDF-1.4 remittance advice"
+    r = up("controller@t-bank", "remittance.pdf", pdf, "application/pdf")
+    assert r.status_code == 201, r.text
+    meta = r.json()
+    assert meta["filename"] == "remittance.pdf" and meta["size"] == len(pdf) and meta["by"] == "controller@t-bank" and len(meta["sha256"]) == 64
+    assert up("controller@t-bank", "receipt.png", b"\x89PNG\r\n\x1a\n....", "image/png").status_code == 201
+    assert up("controller@t-bank", "fake.pdf", b"not a pdf", "application/pdf").status_code == 422          # content must match the type
+    assert up("controller@t-bank", "fake.png", b"GIF89a", "image/png").status_code == 422
+    assert up("controller@t-bank", "tool.exe", b"MZ....", "application/octet-stream").status_code == 422
+    assert up("controller@t-bank", "empty.txt", b"", "text/plain").status_code == 422
+    assert up("risk@t-bank", "note.txt", b"hello", "text/plain").status_code == 403                         # viewers cannot upload
+    assert up("admin@t-health", "note.txt", b"hello", "text/plain").status_code == 404                      # other workspace
+    assert up("controller@t-bank", "../../etc/passwd", b"x", "text/plain").json()["filename"] == "passwd"   # path parts dropped
+    rec = c.get(f"/v1/decisions/{did}", headers=h("risk@t-bank")).json()
+    assert [a["filename"] for a in rec["attachments"]] == ["remittance.pdf", "receipt.png", "passwd"]
+    got = c.get(f"/v1/decisions/{did}/attachments/{meta['id']}", headers=h("risk@t-bank"))
+    assert got.status_code == 200 and got.content == pdf and got.headers["x-content-type-options"] == "nosniff"
+    assert 'attachment; filename="remittance.pdf"' == got.headers["content-disposition"]
+    assert c.get(f"/v1/decisions/{did}/attachments/{meta['id']}", headers=h("admin@t-health")).status_code == 404
+    assert c.get("/v1/decisions-verify", headers=h("admin@t-bank")).json()["valid"] is True                 # chain unaffected
+    c.post(f"/v1/decisions/{did}/resolve", headers=h("controller@t-bank"), json={"outcome": "approve", "reason": "Remittance attached"})
+    assert up("controller@t-bank", "late.txt", b"late", "text/plain").status_code == 409                    # decided: no more files
+
+
+def test_overview_charts_filtered_downloads_and_resubmissions(env, public_dns):
+    """2026-11-13: overview chart data; evidence downloads for one person (PDF/CSV/JSON) with the chain still checked over
+    every record; an item sent again after a rejection is marked as a resubmission (record + bell)."""
+    c, h = env
+    key = register(c, h)["trustops_key"]
+    send = lambda title, ctx=None: c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
+        "actor": {"type": "human", "id": "staff@firm.example"}, "action": "submit_for_review", "client": "client-a", "amount_minor": 50_000,
+        "currency": "USD", "title": title, "facts": [{"label": "Bank line", "value": "500.00"}], **({"context": ctx} if ctx else {})}).json()["decision_id"]
+    first = send("Missing receipt EX-005")
+    ask(c, key, actor_id="agent:recon", action="email_client")                     # blocked
+    ask(c, key, amount=5000)                                                       # allowed
+    c.post(f"/v1/decisions/{first}/resolve", headers=h("controller@t-bank"), json={"outcome": "reject", "reason": "No receipt"})
+
+    ins = c.get("/v1/decisions-insights", headers=h("risk@t-bank")).json()
+    assert ins["mix"] == {"ALLOW": 1, "ESCALATE": 1, "DENY": 1} and ins["outcomes"] == {"approved": 0, "rejected": 1, "waiting": 0}
+    assert ins["turnaround"]["decided"] == 1 and ins["turnaround"]["within_target"] == 1 and ins["policies"][0]["count"] == 1
+
+    again = send("Missing receipt EX-005", {"resubmission": 1, "resubmission_of": first})
+    rec = c.get(f"/v1/decisions/{again}", headers=h("admin@t-bank")).json()
+    assert rec["context"] == {"resubmission": 1, "resubmission_of": first}
+    bell = c.get("/v1/notifications", headers=h("controller2@t-bank")).json()
+    assert bell["items"][0]["kind"] == "RESUBMITTED" and bell["items"][0]["decision_id"] == again
+
+    people = c.get("/v1/decisions-people", headers=h("risk@t-bank")).json()
+    ids = {x["id"]: x for x in people["people"]}
+    assert ids["controller@t-bank"]["kind"] == "person" and ids["agent:recon"]["kind"] == "agent" and people["applications"] == ["Recon app"]
+    csv = c.get("/v1/decisions-export?fmt=csv&person=controller@t-bank", headers=h("risk@t-bank"))
+    rows = csv.text.strip().splitlines()[1:]
+    assert len(rows) == 2 and all("controller@t-bank" in r for r in rows)            # the rejected item + their resolution record
+    assert "trustops-decisions-controller-t-bank-" in csv.headers["content-disposition"]
+    pack = c.get("/v1/decisions-export?fmt=json&outcome=REJECTED", headers=h("risk@t-bank")).json()
+    assert [r["id"] for r in pack["records"]] == [first] and pack["verification"]["checked"] == 5 and "outcome: rejected" in pack["filter"]
+    pdf = c.get("/v1/decisions-export?fmt=pdf&person=controller@t-bank&since=2000-01-01&until=2999-12-31", headers=h("risk@t-bank"))
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+    assert c.get("/v1/decisions-export?fmt=csv&since=13-11-2026", headers=h("risk@t-bank")).status_code == 422
+    nobody = c.get("/v1/decisions-export?fmt=json&person=nobody@x", headers=h("risk@t-bank")).json()
+    assert nobody["records"] == [] and nobody["verification"]["valid"]

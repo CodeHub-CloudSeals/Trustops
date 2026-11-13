@@ -13,10 +13,11 @@ def test_opens_directly_and_uses_the_light_theme_even_in_a_dark_browser(as_user)
 
 
 def test_ledgersight_v7_shell_top_bar_rail_and_pill(as_user):
-    """LedgerSight design v7 shell: top bar (workspace, page, who), sliding menu pill, menu collapses to an icon rail."""
+    """LedgerSight design v7 shell: top bar (workspace, who), sliding menu pill, menu collapses to an icon rail."""
     page = as_user("admin@t-bank", "decisions", width=1440)
     expect(page.locator(".topbar .ws-pill")).to_contain_text("T-Bank")
-    expect(page.locator(".topbar .workspace-breadcrumb")).to_contain_text("Decisions")
+    assert page.locator(".topbar .workspace-breadcrumb").count() == 0               # no page-name chip in the top bar
+    expect(page.locator('#nav a[aria-current="page"]')).to_contain_text("Decisions")
     expect(page.locator(".topbar .role-pill")).to_contain_text("Administrator")
     assert page.locator("#nav > .nav-pill").count() == 1
     page.get_by_role("button", name="Collapse menu").click()
@@ -26,7 +27,31 @@ def test_ledgersight_v7_shell_top_bar_rail_and_pill(as_user):
     expect(page.locator("body")).not_to_have_class(re.compile(r"\bside-mini\b"))
     page.get_by_role("link", name="Risk").click()
     expect(page.get_by_role("heading", name="Risk", exact=True)).to_be_visible()
-    expect(page.locator(".topbar .workspace-breadcrumb")).to_contain_text("Risk")
+    expect(page.locator('#nav a[aria-current="page"]')).to_contain_text("Risk")
+    assert page.errors == []
+
+
+def test_sidebar_matches_ledgersight_and_trusttwin_answers(as_user):
+    """2026-11-13 (user request): the sidebar has LedgerSight's sizes (268px panel, 18px icons, active marker visible)
+    and TrustTwin, the read-only assistant, sits at its foot like LedgerSight's FinTwin."""
+    page = as_user("admin@t-bank", "evidence", width=1440)
+    side = page.locator("header.top").bounding_box()
+    assert round(side["width"]) == 268
+    icon = page.locator("#nav .module-menu-link[aria-current=page] .nav-icon svg").bounding_box()
+    assert round(icon["width"]) == 18
+    pill = page.locator("#nav > .nav-pill").bounding_box()
+    nav = page.locator("#nav").bounding_box()
+    assert pill["x"] - nav["x"] >= 11                                            # room for the marker beside the pill
+    twin = page.get_by_role("button", name=re.compile("TrustTwin"))
+    expect(twin).to_be_visible()
+    page.keyboard.press("Control+k")
+    expect(page.locator("#ask-drawer")).to_have_attribute("aria-hidden", "false")
+    page.locator("#ask-q").fill("What was blocked recently?")
+    page.locator("#ask-q").press("Enter")
+    expect(page.locator("#ask-out .a-bubble .a").last).not_to_be_empty()
+    expect(page.locator("#ask-out .gov-pill").last).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#ask-drawer")).to_have_attribute("aria-hidden", "true")
     assert page.errors == []
 
 

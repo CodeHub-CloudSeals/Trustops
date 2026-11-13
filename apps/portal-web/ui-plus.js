@@ -36,7 +36,8 @@
     if (!a || !a.offsetParent || !wide.matches) { pill.style.opacity = "0"; return; }
     pill.style.opacity = "1";
     const box = { x: a.offsetLeft, y: a.offsetTop, width: a.offsetWidth, height: a.offsetHeight };
-    pill.style.setProperty("--pl", `${a.offsetLeft + (document.body.classList.contains("side-mini") ? 10 : 12)}px`);
+    // the dark marker sits at the menu's left edge (the menu has 12px / 10px of room each side, like LedgerSight's)
+    pill.style.setProperty("--pl", `${a.offsetLeft}px`);
     const same = Math.abs(cur.top - box.y) < 0.5 && Math.abs(cur.bottom - (box.y + box.height)) < 0.5 && Math.abs(cur.x - box.x) < 0.5 && Math.abs(cur.w - box.width) < 0.5;
     if (!motionOn || instant || railMoving() || !cur.w) {
       stopPill(); Object.assign(cur, { x: box.x, top: box.y, bottom: box.y + box.height, w: box.width }); paint(); return;
