@@ -1,10 +1,11 @@
+import { fmtDateTime } from "./dates.js?v=d-2026-11-16";
 const documentViews=new Map();
 export function createDocumentReviews({el,api,state,toast,workspaces=[]}) {
   const base="/v1/applications/ledgersight/documents";
   const root=el("section",{class:"gov-panel doc-workspace","aria-label":"Document approvals"});
   const viewKey=`${state.me?.sub}:${state.me?.tenant?.tenant_id}`;
   let data=null,view=documentViews.get(viewKey)||"PENDING";
-  const time=value=>value?new Date(value).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}):"Not supplied";
+  const time=value=>fmtDateTime(value,"Not supplied");
   const label=value=>String(value||"").replaceAll("_"," ").toLowerCase().replace(/^./,c=>c.toUpperCase());
   const button=(text,fn,primary=false)=>el("button",{type:"button",class:`gov-button${primary?"":" gov-secondary"}`,onclick:async()=>{try{await fn();}catch(e){toast(e.message,true);}}},text);
   const badge=status=>el("span",{class:`gov-pill gov-${status==="APPROVED"?"green":status==="REJECTED"?"rose":"amber"}`},label(status));

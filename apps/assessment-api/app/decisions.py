@@ -59,6 +59,73 @@ DEFAULT_RULES = [
      "reason": "Read-only actions are permitted", "enabled": True},
 ]
 DEFAULT_ID = "DEFAULT"
+# Version of DEFAULT_RULES. A workspace that saved its own rules keeps them, but rules added to the defaults after it
+# saved are added to it once (16/11: workspaces saved before LS-01/LS-02 existed escalated every LedgerSight agent
+# step). A rule an administrator deletes after that is never added back: only rules newer than the workspace's
+# recorded version are considered.
+DEFAULTS_VERSION = 2
+RULE_ADDED_IN = {"LS-01": 2, "LS-02": 2}          # every other default rule: version 1
+
+
+def upgrade_rules(rules, since):
+    """Rules newer than `since` that are missing, inserted where they sit in DEFAULT_RULES. Returns (rules, added ids)."""
+    have = {r["id"] for r in rules}
+    out, added = [dict(r) for r in rules], []
+    for i, d in enumerate(DEFAULT_RULES):
+        if RULE_ADDED_IN.get(d["id"], 1) <= since or d["id"] in have:
+            continue
+        after = next((x["id"] for x in DEFAULT_RULES[i + 1:] if x["id"] in have or x["id"] in added), None)
+        pos = next((k for k, r in enumerate(out) if r["id"] == after), len(out)) if after else len(out)
+        out.insert(pos, dict(d))
+        added.append(d["id"])
+    return out, added
+
+
+def fmt_time(t, seconds=False):
+    """One date format across TrustOps and LedgerSight (16/11): "16 Nov 2026, 14:05". Server output is UTC."""
+    return time.strftime("%d %b %Y, %H:%M:%S" if seconds else "%d %b %Y, %H:%M", time.gmtime(t)).lstrip("0") if t else "–"
+
+
+def describe_change(e):
+    """A plain sentence for one Authority 'Recent changes' entry (16/11: the raw action codes were not clear)."""
+    a, ref, d = str(e.get("action", "")), str(e.get("ref") or ""), e.get("detail") or {}
+    if a.startswith("authority.agent."):
+        agent = d.get("agent") or ref.split("@")[0]
+        app = f' in {d["application"]}' if d.get("application") else (f' in {ref.split("@", 1)[1]}' if "@" in ref else "")
+        parts = []
+        for c in a[len("authority.agent."):].split("+"):
+            if c == "status=suspended":
+                parts.append(f"Suspended {agent}{app}" + (f" — reason: {d['reason']}" if d.get("reason") else ""))
+            elif c == "status=active":
+                parts.append(f"Resumed {agent}{app}")
+            elif c == "client_scope":
+                cl = d.get("allowed_clients")
+                parts.append(f"Limited {agent}{app} to {', '.join(cl)}" if cl else f"Allowed {agent}{app} to act for all clients" if cl is not None
+                             else f"Changed which clients {agent}{app} may act for")
+            elif c == "owner":
+                parts.append(f"Set the owner of {agent}{app} to {d['owner']}" if d.get("owner") else f"Cleared the owner of {agent}{app}")
+        return "; ".join(parts) or f"Changed {agent}{app}"
+    if a == "policy.update":
+        bits = [f"{label} {', '.join(d[k])}" for k, label in (("added", "added"), ("changed", "changed"), ("removed", "removed")) if d.get(k)]
+        return "Saved the policies" + (f": {'; '.join(bits)}" if bits else " (no rule changed)" if d else "")
+    if a == "policy.reset":
+        return "Reset the policies to the Finance pack defaults"
+    if a == "policy.defaults_added":
+        return f"TrustOps added new default rules to this workspace: {ref.replace(',', ', ')}"
+    if a.startswith("decision.resolve."):
+        verb = "Approved" if a.endswith("approve") else "Rejected"
+        return f"{verb} “{d['title']}”" if d.get("title") else f"{verb} escalation {ref}"
+    if a == "decision.assign":
+        what = f"“{d['title']}”" if d.get("title") else ref
+        return f"Assigned {what} to {d['to']}" if d.get("to") else f"Opened {what} to any approver"
+    if a.startswith("integration."):
+        name = d.get("name") or (ref.split(":", 1)[1] if ":" in ref and a == "integration.create" else "an application")
+        return {"integration.create": f"Registered the application {name}", "integration.rotate_key": f"Issued a new key for {name}",
+                "integration.update": f"Changed the settings of {name}" + (f" ({', '.join(d['fields'])})" if d.get("fields") else ""),
+                "integration.delete": f"Removed the application {name}",
+                "integration.test": f"Tested the connection to {name}" + (f": {'reachable' if ref.endswith(':ok') else 'failed'}" if ":" in ref else ""),
+                }.get(a, f"Changed {name}")
+    return a.replace(".", " ")
 
 
 def _err(status, code, message):
@@ -79,6 +146,9 @@ class _Mem:
         self.decisions, self.policy_rules, self.agents, self.users, self.audit = [], {}, {}, {}, []
 
 
+META = "__meta__"   # policy_rules[tenant + META] = {"defaults_version": n}; kept beside the rules so no new state field is needed
+
+
 class DecisionStore:
     """Decisions and rules live in the shared Store (persisted with the rest of TrustOps state)."""
 
@@ -88,11 +158,24 @@ class DecisionStore:
     def rules(self, tenant):
         with self.state.lock:
             r = self.state.policy_rules.get(tenant)
-        return [dict(x) for x in r] if r else [dict(x) for x in DEFAULT_RULES]
+            if not r:
+                return [dict(x) for x in DEFAULT_RULES]
+            meta = self.state.policy_rules.get(tenant + META) or {}
+            # Saved before versions were recorded: if it already has a version-2 rule it was saved with them.
+            since = meta.get("defaults_version") or (2 if any(x["id"] in RULE_ADDED_IN for x in r) else 1)
+            if since < DEFAULTS_VERSION:
+                r, added = upgrade_rules(r, since)
+                self.state.policy_rules[tenant] = r
+                self.state.policy_rules[tenant + META] = {"defaults_version": DEFAULTS_VERSION}
+                if added and hasattr(self.state, "audit"):
+                    self.state.audit.append({"at": time.time(), "sub": "TrustOps", "tenant_id": tenant, "action": "policy.defaults_added",
+                                             "ref": ",".join(added), "detail": {"added": added}})
+            return [dict(x) for x in r]
 
     def set_rules(self, tenant, rules):
         with self.state.lock:
             self.state.policy_rules[tenant] = [dict(x) for x in rules]
+            self.state.policy_rules[tenant + META] = {"defaults_version": DEFAULTS_VERSION}
 
     def append(self, tenant, record):
         with self.state.lock:
@@ -266,7 +349,7 @@ def render_pdf(tenant_name, generated_by, records, rules, verification, scope=No
     KV = ParagraphStyle("kv", parent=B, fontSize=8, leading=10, textColor=muted)
     KN = ParagraphStyle("kn", parent=B, fontName="Helvetica-Bold", fontSize=15, leading=18, textColor=ink)
     esc = lambda t: (str(t if t is not None else "–")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    when = lambda t: time.strftime("%d %b %Y %H:%M", time.gmtime(t)) if t else "–"
+    when = fmt_time                                      # "16 Nov 2026, 14:05" (UTC), the console's format
     amt = lambda r: "–" if r.get("amount_minor") is None else f'{r["amount_minor"] / 100:,.2f} {r.get("currency") or ""}'.strip()
     who = lambda r: (f'Agent {r["actor"]["id"].split(":", 1)[1]}' if r["actor"]["id"].startswith("agent:") else f'Agent {r["actor"]["id"]}') \
         if r["actor"]["type"] == "agent" else r["actor"]["id"]
@@ -436,7 +519,8 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             raise _err(422, "invalid_amount", "amount_minor must be a non-negative integer")
         client = str(body.get("client", ""))[:120] or None
         details = parse_details(body)
-        ident = None if simulated else db.touch_agent(tenant, application, {"type": a_type, "id": a_id[:120]})
+        # Only agents and services go into the authority registry (16/11: people showed up there as "agents").
+        ident = None if simulated or a_type == "human" else db.touch_agent(tenant, application, {"type": a_type, "id": a_id[:120]})
         if ident and ident["status"] == "suspended":
             decision, policy, reason = "DENY", "AUTH-SUSPENDED", "This identity is suspended in the TrustOps authority registry"
         elif ident and ident["allowed_clients"] and client not in ident["allowed_clients"]:
@@ -453,7 +537,9 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                "decision": decision, "policy_id": policy, "reason": reason,
                "simulated": simulated, "requested_by": by}
         if decision == "ESCALATE":
-            rec["assignment"] = {"to": check_reviewer(tenant, body.get("assign_to")), "by": by or f"{application['name']}", "at": time.time(), "history": []}
+            to = check_reviewer(tenant, body.get("assign_to"))
+            check_not_requester(rec, to)
+            rec["assignment"] = {"to": to, "by": by or f"{application['name']}", "at": time.time(), "history": []}
         rec = db.append(tenant, rec)
         if ident:
             db.count_agent(ident["id"], decision)
@@ -470,6 +556,15 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             raise _err(422, "not_a_reviewer", "This person is not an Admin or Approver in TrustOps")
         return email
 
+    def requesters(r):
+        return {str(x).strip().lower() for x in (r["actor"]["id"], r.get("requested_by")) if x}
+
+    def check_not_requester(r, to):
+        """Maker-checker for assignment (16/11): the person who sent an item can never be the one named to approve it."""
+        if to and to in requesters(r):
+            raise _err(422, "requester_cannot_approve",
+                       f"{to} sent this item, so they cannot be its approver. Choose a different Admin or Approver.")
+
     def assign(tenant, did, to, by, app_id=None):
         r = db.get(tenant, did)
         if not r or (app_id and r["application"]["id"] != app_id):
@@ -477,11 +572,52 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if r["decision"] != "ESCALATE" or r.get("resolution"):
             raise _err(409, "not_pending", "This item is no longer waiting for review")
         to = check_reviewer(tenant, to)
+        check_not_requester(r, to)
         prev = r.get("assignment") or {"history": []}
         r["assignment"] = {"to": to, "by": by, "at": time.time(),
                            "history": (prev.get("history") or []) + ([{k: prev.get(k) for k in ("to", "by", "at")}] if "at" in prev else [])}
         db.update(tenant, r)
         return {"decision_id": did, "assigned_to": to}
+
+    def resolve_one(p, r, outcome, reason, checked):
+        """Approve or reject one escalated item. Same checks for the single and the bulk endpoint."""
+        if r["decision"] != "ESCALATE" or r.get("resolution"):
+            raise _err(409, "not_pending", "This decision is not waiting for a person")
+        who = identity(p) if identity else p.sub
+        mine = {str(who).lower(), str(p.sub).lower()}
+        own = bool(mine & requesters(r))
+        # Approvers can never resolve their own items. Administrators can, only when nobody is named, and the record says so.
+        if own and "customer_admin" not in p.roles:
+            raise _err(403, "maker_checker_violation", "The requester cannot approve their own action")
+        to = (r.get("assignment") or {}).get("to")
+        # A named approver is binding (16/11): anyone else must reassign it first, which is recorded.
+        if to and to not in mine:
+            raise _err(403, "assigned_to_someone_else",
+                       f"This item is assigned to {to}. Only they can decide it; reassign it to yourself first if you need to.")
+        reason = str(reason or "").strip()
+        if outcome not in ("approve", "reject") or not reason:
+            raise _err(422, "invalid_request", "outcome (approve|reject) and a reason are required")
+        d = r.get("details") or {}
+        ld = r.get("loaded_details") or {}
+        has_details = bool(d.get("facts") or d.get("lines") or d.get("compare") or ld.get("facts") or ld.get("lines") or ld.get("compare"))
+        checked = bool(checked)
+        if outcome == "approve" and not has_details and not (checked and d.get("link")):
+            raise _err(409, "details_required", "This item has no details. Check it in the application (link required) or reject it and ask for details")
+        r["resolution"] = {"outcome": outcome, "reason": reason[:2000], "by": who, "at": time.time(),
+                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none"),
+                           "self_resolved": own}
+        db.update(p.tenant_id, r)
+        db.append(p.tenant_id, {"id": "dec_" + uuid.uuid4().hex[:16], "at": time.time(), "tenant_id": p.tenant_id,
+                                "application": r["application"], "actor": {"type": "human", "id": who},
+                                "action": f"resolve_escalation:{outcome}", "resource": r["id"], "client": r.get("client"),
+                                "amount_minor": r.get("amount_minor"), "currency": r.get("currency"), "context": {"reason": reason[:500]},
+                                "decision": "ALLOW", "policy_id": "MAKER-CHECKER",
+                                "reason": (f"Escalation {r['id']} {outcome}d by the administrator who submitted it (self-approval)" if own
+                                           else f"Escalation {r['id']} {outcome}d by a different person"),
+                                "simulated": r.get("simulated", False), "requested_by": who})
+        if audit:
+            audit(p, f"decision.resolve.{outcome}", r["id"], {"title": d.get("title"), "application": r["application"]["name"]})
+        return r
 
     # ---- applications call this ----
     @router.get("/v1/reviewers")
@@ -535,7 +671,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
     @router.get("/v1/decisions")
     def list_decisions(decision: Optional[str] = None, q: Optional[str] = None, application: Optional[str] = None,
                        pending: bool = False, include_simulated: bool = True, limit: int = Query(200, ge=1, le=1000),
-                       p=Depends(principal)):
+                       full: bool = False, p=Depends(principal)):
         need(p, READ)
         rows = list(reversed(db.all(p.tenant_id)))
         if decision:
@@ -549,7 +685,14 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if q:
             ql = q.lower()
             rows = [r for r in rows if ql in json.dumps(r).lower()]
-        return {"items": rows[:limit], "total": len(rows)}
+        page = rows[:limit]
+        if not full:
+            # 16/11 (slow pages): lists show a title and summary only; the review page loads one item in full.
+            # With LedgerSight's details, 360 waiting items were 706 KB; trimmed they are a fraction of that.
+            page = [{**{k: v for k, v in r.items() if k not in ("details", "loaded_details", "attachments")},
+                     "details": {k: (r.get("details") or {}).get(k) for k in ("title", "summary", "link")} if r.get("details") else None,
+                     "attachment_count": len(r.get("attachments") or [])} for r in page]
+        return {"items": page, "total": len(rows)}
 
     @router.get("/v1/decisions/{did}")
     def one(did: str, p=Depends(principal)):
@@ -569,7 +712,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         need(p, APPROVERS, "Only an approver or administrator can assign reviews")
         out = assign(p.tenant_id, did, body.get("to"), identity(p) if identity else p.sub)
         if audit:
-            audit(p, "decision.assign", did)
+            audit(p, "decision.assign", did, {"to": out["assigned_to"], "title": ((db.get(p.tenant_id, did) or {}).get("details") or {}).get("title")})
         return out
 
     @router.post("/v1/decisions/{did}/resolve")
@@ -578,37 +721,43 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         r = db.get(p.tenant_id, did)
         if not r:
             raise _err(404, "not_found", "Decision not found")
-        if r["decision"] != "ESCALATE" or r.get("resolution"):
-            raise _err(409, "not_pending", "This decision is not waiting for a person")
+        return resolve_one(p, r, body.get("outcome"), body.get("reason", ""), body.get("checked_in_app"))
+
+    # Bulk handling (16/11 action items): approve, reject or assign many waiting items at once. Every item gets exactly the
+    # checks of the single endpoints (maker-checker, named approver, details required) and is recorded on its own; one
+    # item failing never stops the others. The answer lists what happened to each item.
+    BULK_MAX = 200
+
+    @router.post("/v1/decisions-bulk")
+    def bulk(body: dict = Body(...), p=Depends(principal)):
+        need(p, APPROVERS, "Only an approver or administrator can act on review items")
+        ids, op = body.get("ids"), body.get("op")
+        if not isinstance(ids, list) or not ids or len(ids) > BULK_MAX or not all(isinstance(x, str) for x in ids):
+            raise _err(422, "invalid_request", f"Choose between 1 and {BULK_MAX} items")
+        if op not in ("approve", "reject", "assign"):
+            raise _err(422, "invalid_request", "op must be approve, reject or assign")
+        if op in ("approve", "reject") and not str(body.get("reason") or "").strip():
+            raise _err(422, "invalid_request", "Give one reason; it is recorded on every item")
         who = identity(p) if identity else p.sub
-        own = who == r["actor"]["id"] or p.sub == r["actor"]["id"] or who == r.get("requested_by")
-        # Approvers can never resolve their own items. Administrators can, and the record says so openly.
-        if own and "customer_admin" not in p.roles:
-            raise _err(403, "maker_checker_violation", "The requester cannot approve their own action")
-        outcome, reason = body.get("outcome"), str(body.get("reason", "")).strip()
-        if outcome not in ("approve", "reject") or not reason:
-            raise _err(422, "invalid_request", "outcome (approve|reject) and a reason are required")
-        d = r.get("details") or {}
-        ld = r.get("loaded_details") or {}
-        has_details = bool(d.get("facts") or d.get("lines") or d.get("compare") or ld.get("facts") or ld.get("lines") or ld.get("compare"))
-        checked = bool(body.get("checked_in_app"))
-        if outcome == "approve" and not has_details and not (checked and d.get("link")):
-            raise _err(409, "details_required", "This item has no details. Check it in the application (link required) or reject it and ask for details")
-        r["resolution"] = {"outcome": outcome, "reason": reason[:2000], "by": who, "at": time.time(),
-                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none"),
-                           "self_resolved": own}
-        db.update(p.tenant_id, r)
-        db.append(p.tenant_id, {"id": "dec_" + uuid.uuid4().hex[:16], "at": time.time(), "tenant_id": p.tenant_id,
-                                "application": r["application"], "actor": {"type": "human", "id": who},
-                                "action": f"resolve_escalation:{outcome}", "resource": did, "client": r.get("client"),
-                                "amount_minor": r.get("amount_minor"), "currency": r.get("currency"), "context": {"reason": reason[:500]},
-                                "decision": "ALLOW", "policy_id": "MAKER-CHECKER",
-                                "reason": (f"Escalation {did} {outcome}d by the administrator who submitted it (self-approval)" if own
-                                           else f"Escalation {did} {outcome}d by a different person"),
-                                "simulated": r.get("simulated", False), "requested_by": who})
-        if audit:
-            audit(p, f"decision.resolve.{outcome}", did)
-        return r
+        results = []
+        for did in dict.fromkeys(ids):          # once each, in the order given
+            try:
+                r = db.get(p.tenant_id, did)
+                if not r:
+                    raise _err(404, "not_found", "Decision not found")
+                if op == "assign":
+                    assign(p.tenant_id, did, body.get("to"), who)
+                    if audit:
+                        audit(p, "decision.assign", did, {"to": (str(body.get("to") or "").strip().lower() or None),
+                                                          "title": (r.get("details") or {}).get("title"), "bulk": True})
+                else:
+                    resolve_one(p, r, op, body.get("reason"), body.get("checked_in_app"))
+                results.append({"id": did, "ok": True})
+            except HTTPException as e:
+                d = e.detail if isinstance(e.detail, dict) else {"code": "error", "message": str(e.detail)}
+                results.append({"id": did, "ok": False, "status": e.status_code, **d})
+        done = sum(x["ok"] for x in results)
+        return {"op": op, "done": done, "failed": len(results) - done, "results": results}
 
     # ---- attachments: an approver uploads a supporting file (receipt, remittance, ...) to an item waiting for them ----
     # The bytes are checked (type, content, malware scan) by `files` (main.py) and kept in object storage; the record
@@ -817,11 +966,11 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if fmt == "csv":
             buf = io.StringIO()
             w = csv.writer(buf)
-            w.writerow(["sequence", "decision_id", "time_utc", "application", "actor_type", "actor_id", "action", "client",
+            w.writerow(["sequence", "decision_id", "time (UTC)", "application", "actor_type", "actor_id", "action", "client",
                         "amount_minor", "currency", "decision", "policy_id", "reason", "final", "resolved_by", "simulated", "record_hash"])
             for r in records:
                 res = r.get("resolution") or {}
-                w.writerow([r["sequence"], r["id"], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["at"])), r["application"]["name"],
+                w.writerow([r["sequence"], r["id"], fmt_time(r["at"], seconds=True), r["application"]["name"],
                             r["actor"]["type"], r["actor"]["id"], r["action"], r.get("client") or "", r.get("amount_minor") if r.get("amount_minor") is not None else "",
                             r.get("currency") or "", r["decision"], r["policy_id"], r["reason"],
                             {"approve": "APPROVED", "reject": "REJECTED"}.get(res.get("outcome"), "") or ("PENDING" if r["decision"] == "ESCALATE" else r["decision"]),
@@ -861,9 +1010,13 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                           "actor_types": [a for a in r.get("actor_types", []) if a in ("agent", "human", "service")],
                           "min_amount_minor": None if limit in (None, "") else limit, "decision": r["decision"],
                           "reason": str(r.get("reason", ""))[:200] or r["decision"].title(), "enabled": bool(r.get("enabled", True))})
+        before = {x["id"]: x for x in db.rules(p.tenant_id)}
         db.set_rules(p.tenant_id, clean)
         if audit:
-            audit(p, "policy.update", ",".join(x["id"] for x in clean))
+            after = {x["id"]: x for x in clean}
+            audit(p, "policy.update", ",".join(x["id"] for x in clean),
+                  {"added": [k for k in after if k not in before], "removed": [k for k in before if k not in after],
+                   "changed": [k for k in after if k in before and before[k] != after[k]]})
         return {"rules": clean}
 
     @router.post("/v1/policies/reset")
@@ -871,7 +1024,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         need(p, ADMIN, "Only a workspace administrator can change policies")
         db.set_rules(p.tenant_id, [dict(x) for x in DEFAULT_RULES])
         if audit:
-            audit(p, "policy.reset", p.tenant_id)
+            audit(p, "policy.reset", p.tenant_id, {})
         return {"rules": db.rules(p.tenant_id)}
 
 
@@ -915,8 +1068,11 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             people.append({"user": u.get("email") or sub, "roles": [ROLE_CAPS.get(r, (r,))[0] for r in roles], "can": caps,
                            "client_scope": "All clients"})
         history = [e for e in getattr(db.state, "audit", []) if e.get("tenant_id") == p.tenant_id and
-                   str(e.get("action", "")).startswith(("policy.", "authority.", "integration.", "decision.resolve"))][-100:]
-        return {"agents": sorted(db.agents(p.tenant_id), key=lambda a: -(a.get("last_seen") or a["first_seen"])),
+                   str(e.get("action", "")).startswith(("policy.", "authority.", "integration.", "decision.resolve", "decision.assign"))][-100:]
+        emails = {sub: (u.get("email") or sub) for sub, u in users.items()}
+        history = [{**e, "who": emails.get(e.get("sub"), e.get("sub")), "text": describe_change(e)} for e in history]
+        agents = [a for a in db.agents(p.tenant_id) if a.get("actor_type") != "human"]   # people registered before 16/11 are not agents
+        return {"agents": sorted(agents, key=lambda a: -(a.get("last_seen") or a["first_seen"])),
                 "people": sorted(people, key=lambda x: x["user"]),
                 "matrix": {"actor_types": ["agent", "human", "service"], "actions": actions,
                            "cells": {f"{t}|{a}": cell(t, a) for t in ("agent", "human", "service") for a in actions}},
@@ -955,7 +1111,10 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             changes.append("client_scope")
         db.save_agent(a)
         if audit and changes:
-            audit(p, "authority.agent." + "+".join(changes), f'{a["actor_id"]}@{a["application"]["name"]}')
+            audit(p, "authority.agent." + "+".join(changes), f'{a["actor_id"]}@{a["application"]["name"]}',
+                  {"agent": a["actor_id"], "application": a["application"]["name"], "status": a["status"],
+                   "reason": (a.get("status_changed") or {}).get("reason") if "status" in body else None,
+                   "owner": a.get("owner"), "allowed_clients": a.get("allowed_clients")})
         return a
 
 

@@ -1,12 +1,34 @@
-import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-13h";
-import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-13w";
-import { registerApplications } from "./applications.js?v=access-2026-11-13f";
-import { registerNotifications } from "./notifications.js?v=notif-2026-11-13b";
-import { registerAssistant } from "./assistant.js?v=tt-2026-11-13b";
+import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-16";
+import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-16";
+import { registerApplications } from "./applications.js?v=access-2026-11-16";
+import { registerNotifications } from "./notifications.js?v=notif-2026-11-16";
+import { registerAssistant } from "./assistant.js?v=tt-2026-11-16";
+import { fmtDate, fmtDateTime, fmtTime } from "./dates.js?v=d-2026-11-16";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);
 const main = $("#main"), nav = $("#nav"), who = $("#who"), contextBar = $("#contextBar");
-const state = { token: sessionStorage.getItem("taad_token"), me: null, cfg: { mode: "oidc", oidc: {} } };
+// Sign-in is kept for the tab (sessionStorage) and shared with new tabs for under an hour (localStorage), so a link from
+// LedgerSight ("Approve in TrustOps ↗", opened in a new tab) lands on the page instead of a fresh Google sign-in (16/11).
+const TOKEN_TTL_MS = 55 * 60 * 1000;
+function savedToken() {
+  const s = sessionStorage.getItem("taad_token");
+  if (s) return s;
+  try {
+    const t = JSON.parse(localStorage.getItem("taad_token_shared") || "null");
+    if (t && t.token && Date.now() - t.at < TOKEN_TTL_MS) { sessionStorage.setItem("taad_token", t.token); return t.token; }
+  } catch { /* unreadable: sign in again */ }
+  return null;
+}
+function storeToken(tok) {
+  if (tok) {
+    sessionStorage.setItem("taad_token", tok);
+    try { localStorage.setItem("taad_token_shared", JSON.stringify({ token: tok, at: Date.now() })); } catch { /* storage off */ }
+  } else {
+    sessionStorage.removeItem("taad_token");
+    try { localStorage.removeItem("taad_token_shared"); } catch { /* storage off */ }
+  }
+}
+const state = { token: savedToken(), me: null, cfg: { mode: "oidc", oidc: {} } };
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -43,7 +65,7 @@ async function api(path, { method = "GET", body, headers = {}, raw = false, idem
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     // An expired or revoked sign-in (Google ID tokens last one hour): return to the sign-in page instead of failing silently.
-    if (r.status === 401 && state.token && !path.startsWith("/v1/auth/")) { sessionStorage.removeItem("taad_token"); state.token = null; state.me = null; setTimeout(render, 0); }
+    if (r.status === 401 && state.token && !path.startsWith("/v1/auth/")) { storeToken(null); state.token = null; state.me = null; setTimeout(render, 0); }
     const e = new Error(data.message || r.statusText); e.status = r.status; e.code = data.code; throw e;
   }
   return data;
@@ -72,7 +94,9 @@ async function oidcLogin() {
   const challenge = b64u(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   const st = b64u(crypto.getRandomValues(new Uint8Array(16)));
   sessionStorage.setItem("pkce", JSON.stringify({ verifier, st }));
-  location.href = `${o.authorize_url}?response_type=code&client_id=${encodeURIComponent(o.client_id)}&redirect_uri=${encodeURIComponent(o.redirect_uri)}&scope=${encodeURIComponent(o.scope)}&code_challenge=${challenge}&code_challenge_method=S256&state=${st}${o.provider === "google" ? "&prompt=select_account" : ""}`;
+  // Remember the page that was asked for (e.g. #/approval/dec_… from LedgerSight): Google's redirect drops the #part.
+  if (location.hash && location.hash !== "#/register") sessionStorage.setItem("taad_return", location.hash);
+  location.href =`${o.authorize_url}?response_type=code&client_id=${encodeURIComponent(o.client_id)}&redirect_uri=${encodeURIComponent(o.redirect_uri)}&scope=${encodeURIComponent(o.scope)}&code_challenge=${challenge}&code_challenge_method=S256&state=${st}${o.provider === "google" ? "&prompt=select_account" : ""}`;
 }
 async function oidcCallback(params) {
   if (params.has("error") || !params.get("code")) {
@@ -86,11 +110,13 @@ async function oidcCallback(params) {
     body: new URLSearchParams({ grant_type: "authorization_code", client_id: o.client_id, code: params.get("code"), redirect_uri: o.redirect_uri, code_verifier: saved.verifier }) });
   if (!r.ok) throw new Error("Sign-in failed");
   state.token = (await r.json()).access_token;
-  sessionStorage.setItem("taad_token", state.token); sessionStorage.removeItem("pkce");
-  history.replaceState({}, "", location.pathname);
+  storeToken(state.token); sessionStorage.removeItem("pkce");
+  const back = sessionStorage.getItem("taad_return") || "";
+  sessionStorage.removeItem("taad_return");
+  history.replaceState({}, "", location.pathname + (/^#\/[\w./-]*$/.test(back) ? back : ""));   // straight to the page that was asked for
 }
 function logout() {
-  sessionStorage.removeItem("taad_token"); sessionStorage.removeItem("pkce"); state.token = null; state.me = null; notify.reset(); twin.reset();
+  storeToken(null); sessionStorage.removeItem("pkce"); state.token = null; state.me = null; notify.reset(); twin.reset();
   const o = state.cfg.oidc;
   if (state.cfg.mode === "oidc" && o.logout_url && o.client_id && o.redirect_uri) {
     const url = new URL(o.logout_url); url.searchParams.set("client_id", o.client_id); url.searchParams.set("logout_uri", o.redirect_uri);
@@ -107,7 +133,7 @@ async function loginView() {
     const localAdmin = users.items.find((u) => u.sub === "admin@t-bank");
     if (localAdmin?.token) {
       state.token = localAdmin.token;
-      sessionStorage.setItem("taad_token", localAdmin.token);
+      storeToken(localAdmin.token);
       await render();
       return;
     }
@@ -228,7 +254,9 @@ async function render() {
   who.replaceChildren(
     el("span", { class: "role-pill", title: person }, el("span", { class: "role-dot", "aria-hidden": "true" }),
       el("span", { class: "role-k" }, "Signed in as"), el("b", {}, roleName)),   // role only, like LedgerSight; the email shows on hover
-    notify.element(),
+    // The bell reads the workspace's decision log: only for people who have one. CloudSeals staff without a customer
+    // workspace got a 403 every 10 s (the failing staff/studio browser tests on PR #1).
+    state.me.tenant || roles.includes("cloudseals_admin") ? notify.element() : "",
     state.cfg.mode === "dev" ? "" : el("button", { class: "iconbtn", type: "button", onclick: logout, "aria-label": "Sign out", title: "Sign out" },
       topIco("M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3")),
     el("span", { class: "avatar", title: `${person} · ${roleName}`, "aria-hidden": "true" }, initials(person)));
@@ -247,10 +275,13 @@ async function render() {
     return;
   }
   const view = routes[name] || routes.assessments;
-  main.replaceChildren(el("p", {}, "Loading…"));
+  // 16/11 (pages felt stuck): show that the page is loading straight away instead of a bare line of text.
+  main.setAttribute("aria-busy", "true");
+  main.replaceChildren(el("div", { class: "page-loading", role: "status" }, el("i", { "aria-hidden": "true" }), "Loading…"));
   try {
     await view(arg);
   } catch (e) { main.replaceChildren(el("div", { class: "card" }, el("h2", {}, "Something went wrong"), el("p", {}, e.message))); }
+  main.removeAttribute("aria-busy");
   main.focus();
 }
 window.addEventListener("hashchange", render);
@@ -560,9 +591,9 @@ async function applicationEvidencePanel(ctx, draw) {
     return el("article",{class:"application-evidence-card"},
       el("div",{class:"module-panel-heading"},el("div",{},el("span",{class:"eyebrow"},"APPLICATION OBSERVATIONS"),el("h4",{},run.capture.target_url)),
         el("span",{class:`tag ${published ? "ok" : "medium"}`},published ? "Published" : run.status.replaceAll("_"," "))),
-      el("p",{class:"help"},`${run.capture.producer === "trustops-http-inspector" ? "Public-page HTTP inspection" : "REA browser capture"} ${run.capture.producer_version} · ${new Date(run.capture.started_at).toLocaleString()} · ${run.capture.observation_ms / 1000}s observation window`),
+      el("p",{class:"help"},`${run.capture.producer === "trustops-http-inspector" ? "Public-page HTTP inspection" : "REA browser capture"} ${run.capture.producer_version} · ${fmtDateTime(run.capture.started_at)} · ${run.capture.observation_ms / 1000}s observation window`),
       el("div",{class:"application-evidence-stats"},[[run.capture.dom_nodes,run.capture.producer === "trustops-http-inspector" ? "HTML elements" : "DOM nodes"],[run.capture.scripts.length,"Script records"],[run.capture.requests.length,"Network requests"]].map(([v,l])=>el("div",{},el("strong",{},String(v)),el("span",{},l)))),
-      el("ol",{class:"application-evidence-flow","aria-label":"Completed workflow steps"},run.events.map(ev=>el("li",{},el("strong",{},({validate_capture:"Capture checked",analyse_metadata:"Observations prepared",human_review:"Reviewer decision",report_draft:"Report drafted"})[ev.step] || ev.step.replaceAll("_"," ")),el("small",{},`Completed ${new Date(ev.at*1000).toLocaleTimeString()}`)))),
+      el("ol",{class:"application-evidence-flow","aria-label":"Completed workflow steps"},run.events.map(ev=>el("li",{},el("strong",{},({validate_capture:"Capture checked",analyse_metadata:"Observations prepared",human_review:"Reviewer decision",report_draft:"Report drafted"})[ev.step] || ev.step.replaceAll("_"," ")),el("small",{},`Completed ${fmtDateTime(ev.at)}`)))),
       el("details",{},el("summary",{},"What was observed"),el("ul",{},run.observations.map(o=>el("li",{},o.text,el("small",{},` Source: ${o.source}`)))),
         el("h5",{},"Script metadata"),el("ul",{},run.capture.scripts.map(s=>el("li",{},s.url))),
         el("h5",{},"Network metadata"),run.capture.requests.length ? el("div",{class:"table-scroll"},el("table",{},el("thead",{},el("tr",{},["Method","URL","HTTP status"].map(t=>el("th",{},t)))),el("tbody",{},run.capture.requests.map(r=>el("tr",{},el("td",{},r.method),el("td",{},r.url),el("td",{},r.status ?? "Unknown")))))) : el("p",{class:"help"},"No requests retained in this window; earlier activity is unknown.")),
@@ -963,7 +994,7 @@ routes.activity = async () => {
     const from = r.total ? r.offset + 1 : 0, to = Math.min(r.offset + r.limit, r.total);
     out.replaceChildren(r.items.length ? el("div", { class: "table-wrap" }, el("table", { class: "module-table" },
       el("thead", {}, el("tr", {}, ["When", "Who", "Action", "Reference"].map((h) => el("th", { scope: "col" }, h)))),
-      el("tbody", {}, r.items.map((a) => el("tr", {}, el("td", {}, new Date(a.at * 1000).toLocaleString()), el("td", {}, a.email || a.sub, a.email ? el("br") : "", a.email ? el("small", { class: "help" }, a.sub) : ""),
+      el("tbody", {}, r.items.map((a) => el("tr", {}, el("td", {}, fmtDateTime(a.at)), el("td", {}, a.email || a.sub, a.email ? el("br") : "", a.email ? el("small", { class: "help" }, a.sub) : ""),
         el("td", {}, el("span", { class: "audit-action" }, a.action)), el("td", {}, String(a.ref).slice(0, 80))))))) : el("p", { class: "empty-state" }, "No events match these filters."),
       el("div", { class: "row audit-pager" }, el("span", { class: "help" }, `Showing ${from} to ${to} of ${r.total}`),
         el("button", { class: "secondary", disabled: q.offset === 0, onclick: () => { q.offset = Math.max(0, q.offset - q.limit); load(); } }, "← Newer"),
@@ -992,7 +1023,7 @@ routes["service-health"] = async () => {
       el("section", { class: "module-card-grid health-grid" },
         card("Service", "ok", [["Revision", h.service.revision || "local"], ["Environment", h.service.environment], ["Sign-in", h.service.auth], ["Uptime", upt(h.service.uptime_seconds)]]),
         card("Application state", h.state.last_save_error ? "bad" : h.state.durable ? "ok" : "warn", [["Storage", h.state.backend], ["Durable", h.state.durable ? "Yes" : "No (lost on restart)"],
-          ["Saves since start", h.state.saves], ["Last save", h.state.last_save_at ? new Date(h.state.last_save_at * 1000).toLocaleTimeString() : "none yet"], h.state.last_save_error ? ["Last error", h.state.last_save_error] : null]),
+          ["Saves since start", h.state.saves], ["Last save", h.state.last_save_at ? fmtTime(h.state.last_save_at) : "none yet"], h.state.last_save_error ? ["Last error", h.state.last_save_error] : null]),
         card("Evidence storage", h.evidence_store.backend === "local-disk" ? "warn" : "ok", [["Backend", h.evidence_store.backend]]),
         card("Malware scanning", h.malware_scanner.probe ? (h.malware_scanner.probe.ok ? "ok" : "bad") : h.malware_scanner.configured ? "ok" : "warn",
           [["Engine", h.malware_scanner.engine || "Basic byte checks only (no scanner configured)"], ["Uploads", h.malware_scanner.configured ? "Scanned before use; rejected if the scanner is down" : "Checked for known signatures only"]], probeLine(h.malware_scanner.probe)),
@@ -1359,7 +1390,7 @@ const INDUSTRIES = ["financial_services", "pharma", "healthcare", "retail", "man
 const FRAMEWORK_SHORT = { eu_ai_act: "EU AI Act", iso_42001: "ISO 42001", nist_ai_rmf: "NIST AI RMF", sr_11_7: "SR 11-7", fda_samd: "FDA SaMD" };
 const label = (v) => String(v).replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
 const caseStatusChip = (s) => el("span", { class: `case-status cs-${s}` }, CASE_STATUS_LABEL[s] || s);
-const when = (t) => new Date(t * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const when = (t) => fmtDate(t);
 const staffName = (a) => a.email || a.sub;
 
 routes.cases = async () => {
@@ -1461,7 +1492,7 @@ routes.case = async (cid) => {
       const { items } = await api(`/v1/cases/${cid}/audit`);
       body = el("section", { class: "module-panel" }, el("span", { class: "eyebrow" }, "ACTIVITY"), el("h3", {}, `${items.length} recorded event${items.length === 1 ? "" : "s"}`),
         items.length ? el("div", { class: "table-wrap" }, el("table", { class: "module-table" }, el("thead", {}, el("tr", {}, ["When", "Who", "Action", "Reference"].map((h) => el("th", { scope: "col" }, h)))),
-          el("tbody", {}, items.map((a) => el("tr", {}, el("td", {}, new Date(a.at * 1000).toLocaleString()), el("td", {}, a.email || a.sub), el("td", {}, a.action), el("td", {}, String(a.ref).slice(0, 44))))))) : el("p", { class: "empty-state" }, "Nothing recorded yet."));
+          el("tbody", {}, items.map((a) => el("tr", {}, el("td", {}, fmtDateTime(a.at)), el("td", {}, a.email || a.sub), el("td", {}, a.action), el("td", {}, String(a.ref).slice(0, 44))))))) : el("p", { class: "empty-state" }, "Nothing recorded yet."));
     }
     main.replaceChildren(moduleFrame("CLOUDSEALS · CASE", c.title, `${c.customer_name} · ${label(c.tier)}`, el("p", {}, el("a", { href: "#/cases" }, "← All cases"), " ", caseStatusChip(c.status)), tabs, body));
   };

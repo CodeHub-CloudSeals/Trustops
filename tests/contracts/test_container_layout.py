@@ -1,4 +1,5 @@
 """The Docker image must contain every file the API reads at import time (a missing file crashes the container on boot)."""
+import os
 import re
 import shutil
 import subprocess
@@ -22,7 +23,8 @@ def test_image_layout_boots_the_app(tmp_path):
                 shutil.copy(ROOT / src, tmp_path / (dest if dest not in (".", "./") else src))
     code = ("import sys;from app.main import app;from fastapi.testclient import TestClient;"
             "r=TestClient(app).get('/health');assert r.status_code==200, r.text")
-    env = {"PYTHONPATH": ":".join(str(tmp_path / p) for p in ("packages/question-engine", "packages/reporting", "apps/assessment-api")),
-           "TAAD_ENV": "local", "TAAD_AUTH_MODE": "dev", "PATH": "/usr/bin:/bin"}
+    env = {"PYTHONPATH": os.pathsep.join(str(tmp_path / p) for p in ("packages/question-engine", "packages/reporting", "apps/assessment-api")),
+           "TAAD_ENV": "local", "TAAD_AUTH_MODE": "dev", "PATH": os.environ.get("PATH", "") if os.name == "nt" else "/usr/bin:/bin",
+           **({"SYSTEMROOT": os.environ["SYSTEMROOT"]} if os.name == "nt" and "SYSTEMROOT" in os.environ else {})}
     r = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-1500:]

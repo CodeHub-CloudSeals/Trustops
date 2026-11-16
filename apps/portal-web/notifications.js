@@ -1,3 +1,4 @@
+import { fmtDate } from "./dates.js?v=d-2026-11-16";
 // Notifications bell (TrustOps side of the LedgerSight ↔ TrustOps link). Port of LedgerSight's bell.
 // The server reads them from the decision records (GET /v1/notifications): approvers are told when an application sends an
 // item for approval or an agent's action is escalated; everyone is told when someone else approves or rejects an item and
@@ -27,7 +28,7 @@ export function registerNotifications({ el, api, toast, state }) {
     return `${who(it)} · ${it.title}`;
   }
   const ago = (sec) => (sec < 60 ? "just now" : sec < 3600 ? `${Math.round(sec / 60)} min ago` : `${Math.round(sec / 3600)} h ago`);
-  const when = (t) => { const s = Date.now() / 1000 - t; return s < 86400 ? ago(Math.max(1, s)) : new Date(t * 1000).toLocaleDateString("en-GB"); };
+  const when = (t) => { const s = Date.now() / 1000 - t; return s < 86400 ? ago(Math.max(1, s)) : fmtDate(t); };
 
   // One bell for the whole session: app.js puts the same element back into the top bar on every page.
   const count = el("span", { class: "notif-count hidden", "aria-hidden": "true" });

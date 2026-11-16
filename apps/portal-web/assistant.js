@@ -67,7 +67,14 @@ export function registerAssistant({ el, api, state }) {
   function renderLog() {
     out.replaceChildren(...log.map(({ q, a }) => el("div", { class: "qa" }, el("div", { class: "q-bubble" }, q),
       a ? bubble(a) : el("div", { class: "a-bubble" }, el("span", { class: "typing", "aria-label": `${NAME} is answering` }, el("i"), el("i"), el("i"))))));
-    scroll.scrollTop = scroll.scrollHeight;
+    // 16/11: scroll after the browser has laid out the new message. A long answer starts at its question, so the reader
+    // sees the beginning of the answer rather than the end of a table.
+    requestAnimationFrame(() => {
+      const last = out.lastElementChild;
+      if (!last) return;
+      const top = scroll.scrollTop + last.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 8;
+      scroll.scrollTop = last.offsetHeight > scroll.clientHeight ? top : scroll.scrollHeight;
+    });
   }
   async function loadChips() {
     if (!suggestions) { try { suggestions = (await api("/v1/assistant/suggestions")).suggestions; } catch { suggestions = []; } }

@@ -1,5 +1,6 @@
+import { fmtDateTime } from "./dates.js?v=d-2026-11-16";
 import { registerGovernanceTeam } from "./governance-team.js?v=access-2026-11-13f";
-import { createDocumentReviews } from "./document-reviews.js?v=document-reviews-2026-11-12";
+import { createDocumentReviews } from "./document-reviews.js?v=document-reviews-2026-11-16";
 // Live application governance. Credentials and client-scope mappings remain server-side.
 export function registerApplications({ routes, main, el, state, toast, api }) {
   registerGovernanceTeam({routes,main,el,api,state,toast});
@@ -25,7 +26,7 @@ export function registerApplications({ routes, main, el, state, toast, api }) {
   const routeFor = {Runs: "governance-runs", Reviews: "governance-reviews", Controls: "governance-controls", Evidence: "governance-evidence"};
   const pending = r => ["OPEN", "RETURNED", "PENDING", "PROPOSED"].includes(r.status);
   const nice = value => String(value || "—").replaceAll("_", " ").toLowerCase().replace(/^./, c => c.toUpperCase());
-  const when = value => value ? new Date(value).toLocaleString(undefined, {dateStyle: "medium", timeStyle: "short"}) : "—";
+  const when = value => fmtDateTime(value, "—");
   const tone = value => ["PASS", "COMPLETE", "ACCEPTED", "ALLOW"].includes(value) ? "green" : ["FAIL", "DENY", "REJECTED"].includes(value) ? "rose" : "amber";
   const sourceLink = (data, label = "Open LedgerSight", hash = "") => el("a", {class: "gov-button gov-secondary", href: (data?.service_url || "https://ledgersight-a6v24wp5eq-uk.a.run.app") + hash, target: "_blank", rel: "noopener noreferrer"}, label, ico("external"));
   const empty = (icon, title, copy) => el("div", {class:"gov-empty"}, el("div", {class:"gov-empty-icon"}, ico(icon)), el("h3", {}, title), el("p", {}, copy));

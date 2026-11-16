@@ -2,6 +2,7 @@
 // with the evidence fabric and workflow packs underneath. Every status shown here comes from a live API;
 // anything the runtime does not do yet is labelled "Planned" or "Not connected", never implied.
 import { overviewCharts } from "./overview-charts.js?v=oc-2026-11-13c";
+import { fmtDateTime } from "./dates.js?v=d-2026-11-16";
 
 export function registerTrustBoundary({ routes, main, el, api }) {
   const safe = (p) => p.catch(() => null);
@@ -90,7 +91,7 @@ export function registerTrustBoundary({ routes, main, el, api }) {
       el("section", { class: "gov-panel" }, items.length ? el("div", { class: "gov-table-wrap" }, el("table", { class: "gov-table" },
         el("thead", {}, el("tr", {}, ["Run", "Status", "Decision", "Amount", "Created"].map((h) => el("th", { scope: "col" }, h)))),
         el("tbody", {}, items.map((r) => el("tr", {}, el("td", { class: "gov-code" }, r.run_id), el("td", {}, pill(String(r.status).replaceAll("_", " "), "amber")),
-          el("td", {}, r.policy_decision || "–"), el("td", {}, money(r)), el("td", {}, r.created_at ? new Date(r.created_at * 1000).toLocaleString("en-GB") : "–"))))))
+          el("td", {}, r.policy_decision || "–"), el("td", {}, money(r)), el("td", {}, fmtDateTime(r.created_at)))))))
         : el("div", { class: "gov-empty" }, el("h3", {}, runs ? "No exceptions" : "Runs unavailable"), el("p", {}, runs ? "Every run so far completed inside policy." : "This environment does not expose workflow runs."))),
       el("p", {}, el("a", { href: "#/evidence" }, "All runs →"))));
   };
@@ -98,7 +99,7 @@ export function registerTrustBoundary({ routes, main, el, api }) {
   // ---------- Connected systems (customer-registered applications) ----------
   const INT = "/v1/integrations";
   const send = (path, method, body) => api(path, { method, body });
-  const when = (t) => t ? new Date(t * 1000).toLocaleString("en-GB") : "Never";
+  const when = (t) => fmtDateTime(t, "Never");
   const TONE = { connected: ["Reachable", "green"], failed: ["Test failed", "rose"], untested: ["Not tested", "amber"], key_only: ["Key issued", "green"] };
   routes["connected-systems"] = async () => {
     const [ops, list] = await Promise.all([loadOps(), safe(api(INT))]);
@@ -174,7 +175,7 @@ export function registerTrustBoundary({ routes, main, el, api }) {
 
   // ---------- Approvals (generic, any connected application) ----------
   const money = (r) => r.amount_minor == null ? "–" : `${(r.amount_minor / 100).toLocaleString("en-GB", { minimumFractionDigits: 2 })} ${r.currency || ""}`;
-  const at = (t) => t ? new Date(t * 1000).toLocaleString("en-GB") : "–";
+  const at = (t) => fmtDateTime(t);
   routes.approvals = async () => {
     const runs = await safe(api("/v1/runs?limit=100"));
     const all = runs?.items || [];

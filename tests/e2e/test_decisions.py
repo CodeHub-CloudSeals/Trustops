@@ -169,7 +169,9 @@ def test_submit_for_review_is_approved_in_trustops(env, public_dns):
     d = r.json()
     assert d["decision"] == "ESCALATE" and d["policy_id"] == "FIN-00" and d["status"] == "pending_approval"
     pending = c.get("/v1/decisions?pending=true", headers=h("controller@t-bank")).json()["items"]
-    det = pending[0]["details"]
+    assert pending[0]["details"] == {"title": "Unknown deposit 12,400.00", "summary": "No matching invoice",
+                                     "link": "https://app.example.com/review/123"}           # 16/11: lists carry title/summary only
+    det = c.get("/v1/decisions?pending=true&full=true", headers=h("controller@t-bank")).json()["items"][0]["details"]
     assert det["title"] == "Unknown deposit 12,400.00" and det["facts"][0]["label"] == "Bank line" and det["lines"]["rows"][0] == ["Bank", "12,400.00"]
     one = c.get(f"/v1/decisions/{d['decision_id']}", headers=h("risk@t-bank")).json()
     assert one["details"]["lines"]["columns"] == ["Source", "Amount"]
@@ -524,22 +526,22 @@ def test_overview_charts_filtered_downloads_and_resubmissions(env, public_dns):
 
 
 def test_one_person_signed_in_to_both_apps_still_gets_told(env, public_dns):
-    """Live issue 2026-11-13: the same account sent an item from the application, was the assigned approver in TrustOps and
-    got no bell. An item an application assigns to you is news even when you sent it; your own approve/reject is not."""
+    """Live issue 2026-11-13: an item an application assigns to you is news. Since 16/11 an item can no longer be assigned
+    to the person who sent it (maker-checker), so the "same account in both apps" case is refused with a clear message;
+    an item someone else sent and assigned to you still rings your bell, and your own approve/reject does not."""
     c, h = env
     key = register(c, h)["trustops_key"]
-    did = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
-        "actor": {"type": "human", "id": "controller@t-bank"}, "action": "submit_for_review", "client": "client-a",
-        "amount_minor": 50_000, "currency": "USD", "title": "Missing GL EX-001"}).json()["decision_id"]
+    send = lambda who: c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
+        "actor": {"type": "human", "id": who}, "action": "submit_for_review", "client": "client-a",
+        "amount_minor": 50_000, "currency": "USD", "title": "Missing GL EX-001", "facts": [{"label": "GL", "value": "none"}]}).json()["decision_id"]
+    did = send("controller@t-bank")
     mine = lambda: c.get("/v1/notifications", headers=h("controller@t-bank")).json()["items"]
-    assert not any(i["decision_id"] == did for i in mine())                     # not assigned to them: their own request
-    c.post(f"/v1/decisions/{did}/app-assign", headers={"X-TrustOps-Key": key}, json={"to": "controller@t-bank", "by": "controller@t-bank"})
-    item = next(i for i in mine() if i["decision_id"] == did)
+    assert not any(i["decision_id"] == did for i in mine())                     # their own request
+    r = c.post(f"/v1/decisions/{did}/app-assign", headers={"X-TrustOps-Key": key}, json={"to": "controller@t-bank", "by": "controller@t-bank"})
+    assert r.status_code == 422 and r.json()["code"] == "requester_cannot_approve" and "cannot be its approver" in r.json()["message"]
+    did2 = send("prep@x")
+    assert c.post(f"/v1/decisions/{did2}/app-assign", headers={"X-TrustOps-Key": key}, json={"to": "controller@t-bank", "by": "prep@x"}).status_code == 200
+    item = next(i for i in mine() if i["decision_id"] == did2)
     assert item["kind"] == "SUBMITTED" and item["for_me"] and item["pending"]
-    c.post(f"/v1/decisions/{did}/resolve", headers=h("admin@t-bank"), json={"outcome": "reject", "reason": "No receipt"})
-    kinds = [i["kind"] for i in mine() if i["decision_id"] == did]
-    assert kinds == ["REJECTED", "SUBMITTED"]                                  # someone else's decision is news
-    did2 = c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json={
-        "actor": {"type": "human", "id": "prep@x"}, "action": "submit_for_review", "client": "client-a", "amount_minor": 1, "currency": "USD"}).json()["decision_id"]
     c.post(f"/v1/decisions/{did2}/resolve", headers=h("controller@t-bank"), json={"outcome": "approve", "reason": "ok"})
-    assert [i["kind"] for i in mine() if i["decision_id"] == did2] == ["SUBMITTED"]   # their own approve is not
+    assert [i["kind"] for i in mine() if i["decision_id"] == did2] == ["SUBMITTED"]   # their own approve is not news

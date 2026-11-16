@@ -145,7 +145,10 @@ def authed_client(body, secret, transport=None):
 
 def _check_url(url, allow_private=False):
     u = urlsplit(url or "")
-    if u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment:
+    # http:// only for a local test setup (TAAD_ENV=local + TRUSTOPS_INTEGRATIONS_ALLOW_PRIVATE=1, 16/11), so Load
+    # details can be tried against a LedgerSight on the same laptop. Everywhere else: HTTPS only.
+    scheme_ok = u.scheme == "https" or (allow_private and u.scheme == "http")
+    if not scheme_ok or not u.hostname or u.username or u.password or u.query or u.fragment:
         raise _err("invalid_url", 422, "Enter the application's HTTPS address, e.g. https://app.example.com")
     if not allow_private:
         try:
@@ -244,7 +247,7 @@ def make_router(principal, audit=None, identity=None, store=None, transport=None
         body["key_hint"] = key[:8] + "…" + key[-4:]
         db.put(p.tenant_id, body, secret)
         if audit:
-            audit(p, "integration.rotate_key", iid)
+            audit(p, "integration.rotate_key", iid, {"name": body["name"]})
         return _public(body) | {"trustops_key": key}
 
     @router.patch("/{iid}")
@@ -253,6 +256,7 @@ def make_router(principal, audit=None, identity=None, store=None, transport=None
         rec, secret = db.get(p.tenant_id, iid)
         if not rec:
             raise _err("not_found", 404, "Integration not found")
+        old_name = rec["name"]
         if "name" in body:
             name = str(body.get("name") or "").strip()
             if not 1 <= len(name) <= 80:
@@ -264,16 +268,21 @@ def make_router(principal, audit=None, identity=None, store=None, transport=None
             rec["status"] = "untested" if rec["base_url"] else "key_only"
         db.put(p.tenant_id, rec, secret)
         if audit:
-            audit(p, "integration.update", iid)
+            fields = ([f"renamed from {old_name}"] if rec["name"] != old_name else []) + (["address"] if "base_url" in body else [])
+            audit(p, "integration.update", iid, {"name": rec["name"], "fields": fields})
         return _public(rec)
 
     @router.delete("/{iid}")
     def remove(iid: str, p=Depends(principal)):
         need(p, ADMIN_ROLES)
+        try:
+            gone, _ = db.get(p.tenant_id, iid)      # only for its name in the audit log
+        except Exception:
+            gone = None
         if not db.delete(p.tenant_id, iid):
             raise _err("not_found", 404, "Integration not found")
         if audit:
-            audit(p, "integration.delete", iid)
+            audit(p, "integration.delete", iid, {"name": (gone or {}).get("name")})
         return {"deleted": iid}
 
     @router.post("/{iid}/test")
@@ -300,7 +309,7 @@ def make_router(principal, audit=None, identity=None, store=None, transport=None
         body.update(status="connected" if ok else "failed", last_tested_at=time.time(), last_result=message)
         db.put(p.tenant_id, body, secret)
         if audit:
-            audit(p, "integration.test", f"{iid}:{'ok' if ok else 'fail'}")
+            audit(p, "integration.test", f"{iid}:{'ok' if ok else 'fail'}", {"name": body["name"]})
         return {"ok": ok, "message": message, "integration": _public(body)}
 
     router.store = db

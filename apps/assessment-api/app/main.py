@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 import reporting
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -100,6 +101,10 @@ def err(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status, detail={"code": code, "message": message})
 
 
+def _save_state() -> None:
+    persist.save(STORE)          # serialised inside persist.save
+
+
 @app.middleware("http")
 async def hardening(request: Request, call_next):
     resp = await call_next(request)
@@ -117,7 +122,10 @@ async def hardening(request: Request, call_next):
     resp.headers.setdefault("Content-Security-Policy", portal_csp)
     if request.method not in ("GET", "HEAD", "OPTIONS") and persist.enabled() and resp.headers.get("X-Workflow-Stream") != "1":
         try:
-            persist.save(STORE)
+            # 16/11 (slow pages): the snapshot upload (MBs to Cloud Storage) used to run on the event loop, so every
+            # console page waited behind each application decision being saved. It now runs in a worker thread, one save
+            # at a time; the response still returns only after its change is stored.
+            await run_in_threadpool(_save_state)
         except persist.PersistConflict as e:
             return JSONResponse(status_code=503, content={"code": "retry", "message": str(e)}, headers={"Retry-After": "1"})
     return resp
@@ -208,8 +216,12 @@ def console_principal(p: Principal = Depends(principal)) -> Principal:
     return p
 
 
-def audit(p: Principal, action: str, ref: str) -> None:
-    STORE.audit.append({"at": time.time(), "sub": p.sub, "tenant_id": p.tenant_id, "action": action, "ref": ref})
+def audit(p: Principal, action: str, ref: str, detail: Optional[dict] = None) -> None:
+    """`detail` (optional) lets the Authority page say what changed in a plain sentence."""
+    entry = {"at": time.time(), "sub": p.sub, "tenant_id": p.tenant_id, "action": action, "ref": ref}
+    if detail is not None:
+        entry["detail"] = detail
+    STORE.audit.append(entry)
 
 
 app.include_router(_ledgersight_router(principal, audit, identity=lambda p: STORE.users[p.sub].get("email") or p.sub))

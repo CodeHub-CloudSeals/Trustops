@@ -677,3 +677,38 @@ body.login-page main{margin:0!important;padding:0!important;background:none!impo
 .rv-main .gov-table th,.rv-main .gov-table td{padding:10px 12px}
 .rv-main .gov-table td:nth-child(2){min-width:0}
 .rv-main .gov-table td.w{overflow-wrap:anywhere}
+
+/* 16/11 action items ---------------------------------------------------------------------------------------- */
+/* TrustTwin: scrolling stays inside the panel. At the end of the conversation the wheel used to scroll the page behind
+   it instead (scroll chaining), which read as "the chat does not scroll". The newest answer is brought into view. */
+.drawer{overflow:hidden}
+.drawer-head,.drawer-foot{flex-shrink:0}
+.drawer-body{min-height:0;overscroll-behavior:contain;scroll-behavior:auto}
+.drawer-body>*{flex-shrink:0}
+/* Approvals: select items and act on them together */
+.ap-bulk{display:grid;gap:10px;margin:12px 0 4px;padding:12px 14px;border:1px solid var(--ls-line);border-radius:12px;background:var(--sk-card)}
+.ap-bulk-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.ap-bulk-row .tb-search{flex:1;min-width:220px}
+.ap-all{display:inline-flex;gap:8px;align-items:center;font-weight:650}
+.ap-count{color:var(--ls-muted);font-size:13px}
+.ap-item{align-items:flex-start}
+.ap-check{flex:0 0 auto;padding-top:3px}
+.ap-check input,.ap-all input{width:18px;height:18px;accent-color:var(--ls-accent)}
+.ap-bulk-msg ul{margin:6px 0 0;padding-left:18px;font-weight:400}
+/* Policies: what "Test a decision" is for */
+.tb-explain{display:grid;gap:6px;margin:0 0 12px;font-size:13.5px;line-height:1.55}
+.tb-explain p{margin:0}
+/* Evidence: whole-chain check result */
+.ev-verify-out{margin-top:10px}
+.ev-verify-out .tb-status{margin-top:8px}
+/* Authority: recent changes as sentences */
+.au-changes{list-style:none;margin:0;padding:0}
+.au-changes li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:9px 0;border-bottom:1px solid var(--ls-line)}
+.au-changes li:last-child{border-bottom:0}
+.au-what{font-weight:600;color:var(--ls-text)}
+.au-who{white-space:nowrap}
+/* a page that is still loading says so instead of staying blank */
+.page-loading{display:flex;gap:10px;align-items:center;color:var(--ls-muted);padding:24px 4px}
+.page-loading i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ls-line-2);border-top-color:var(--ls-accent);animation:pl-spin .8s linear infinite}
+@keyframes pl-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.page-loading i{animation:none}}

@@ -39,9 +39,10 @@ def test_reports_do_not_fetch_or_offer_financial_workflows(as_user, assessment):
     expect(page.get_by_role("heading", name="Reports", exact=True)).to_be_visible()
     requests = []
     page.on("request", lambda r: requests.append(r.url))
-    page.get_by_role("link", name="Assessment reports →").click()
-    expect(page.get_by_role("heading", name="Reports", exact=True)).to_be_visible()
-    page.get_by_role("searchbox", name="Search reports").fill("no-such-system")
+    # 768ad75 (13/11) removed the "Assessment reports" link from Reports on purpose: one governance PDF report only.
+    expect(page.get_by_role("link", name="Assessment reports →")).to_have_count(0)
+    page.reload()
+    expect(page.get_by_role("button", name="Download PDF report")).to_be_visible()
     expect(page.get_by_role("tab", name="Workflow results")).to_have_count(0)
     assert not any("/v1/runs" in u or "/v1/workflows" in u or "/v1/approvals" in u for u in requests)
     assert page.errors == []
