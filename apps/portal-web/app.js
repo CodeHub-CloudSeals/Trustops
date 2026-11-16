@@ -2,7 +2,7 @@ import { registerGovernanceConsole } from "./governance-console.js?v=gc-2026-11-
 import { registerTrustBoundary } from "./trust-boundary.js?v=tb-2026-11-16";
 import { registerApplications } from "./applications.js?v=access-2026-11-16";
 import { registerNotifications } from "./notifications.js?v=notif-2026-11-16";
-import { registerAssistant } from "./assistant.js?v=tt-2026-11-16";
+import { registerAssistant } from "./assistant.js?v=tt-2026-11-16b";
 import { fmtDate, fmtDateTime, fmtTime } from "./dates.js?v=d-2026-11-16";
 // TAAD portal: dependency-free ES module. All dynamic text goes through textContent (no innerHTML).
 const $ = (s, r = document) => r.querySelector(s);

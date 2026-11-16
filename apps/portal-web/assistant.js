@@ -1,6 +1,7 @@
 // TrustTwin - Your Governance Digital Twin: the TrustOps counterpart of LedgerSight's FinTwin (same sidebar button,
 // same right-hand panel, same Ctrl+K). Read-only: answers come only from the server (POST /v1/assistant/ask), built
-// from this workspace's decision records, and list the records they used. Nothing is generated or changed here.
+// from this workspace's decision records, and list the records they used. Nothing is changed here. When the server
+// has AI phrasing on (16/11), the reply text may be written by a model from those exact records; it is labelled.
 export function registerAssistant({ el, api, state }) {
   const NAME = "TrustTwin", SUB = "Your Governance Digital Twin";
   const svg = (paths, attrs = {}) => {
@@ -49,11 +50,13 @@ export function registerAssistant({ el, api, state }) {
   const goTo = (href) => { close(); if (href) location.hash = href; };
 
   function bubble(a) {
+    const small = a.status === "SMALLTALK";   // greetings, thanks, help: a plain reply, no status badge
     const [cls, label] = STATUS[a.status] || STATUS.NO_MATCH;
     const links = a.links || [];
     return el("div", { class: "a-bubble" },
-      el("div", { class: "row" }, el("span", { class: `gov-pill ${cls}` }, el("span", { class: "gov-dot" }), label)),
+      small ? "" : el("div", { class: "row" }, el("span", { class: `gov-pill ${cls}` }, el("span", { class: "gov-dot" }), label)),
       el("div", { class: "a" }, a.answer),
+      a.written_by === "ai" ? el("div", { class: "ai-note" }, "Written by AI from the records below") : "",
       a.rows && a.rows.length ? el("div", { class: "tablewrap" }, el("table", {},
         el("thead", {}, el("tr", {}, a.columns.map((c) => el("th", {}, c)))),
         el("tbody", {}, a.rows.map((r, i) => el("tr", {}, r.map((c, j) => el("td", {}, j === 0 && links[i]

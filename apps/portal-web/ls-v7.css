@@ -493,6 +493,7 @@ strong.dt-main{font-weight:650}
 .a-bubble{margin-top:8px;max-width:100%;background:var(--sk-card);border:1px solid var(--ls-line);padding:10px 13px;border-radius:14px 14px 14px 4px;font-size:13px;line-height:1.55}
 .a-bubble .row{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
 .a-bubble .a{margin:0 0 6px;color:var(--ls-text-2)}
+.a-bubble .ai-note{margin:-2px 0 6px;font-size:11px;color:var(--ls-muted)}
 .a-bubble .tablewrap{overflow-x:auto;margin:8px 0 4px}
 .a-bubble table{width:100%;border-collapse:collapse;font-size:12px}
 .a-bubble th{text-align:left;font-weight:650;color:var(--ls-muted);font-size:11px;padding:6px 8px 6px 0;border-bottom:1px solid var(--ls-line)}

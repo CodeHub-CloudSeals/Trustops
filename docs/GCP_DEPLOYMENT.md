@@ -27,6 +27,7 @@ Rollback of the previous Next.js UI: `~/trustops/trustops-uat-cloudrun-backup/tr
 | Sign-in | Google OAuth code flow; `POST /v1/auth/token` adds the client secret server-side; the API verifies the Google ID token. Roles/tenant come from server-side membership. |
 | First admin | `TAAD_FIRST_ADMIN_EMAIL`: first verified sign-in becomes **owner** (all CloudSeals roles), once, `TAAD_ENV=dev` only. Others: Administration -> Users (staff roles limited to `TAAD_STAFF_EMAIL_DOMAINS`). |
 | LLM | `TAAD_LLM_PROVIDER=vertex` -> Gemini; JSON-only, token-capped, grounded; failures fall back or fail closed. |
+| TrustTwin AI phrasing | `TRUSTOPS_ASSISTANT_MODEL=vertex` (separate switch; uses `GOOGLE_CLOUD_PROJECT`, `TAAD_VERTEX_MODEL`, `TAAD_VERTEX_LOCATION`). The model routes the question and phrases the exact rule result; numbers/ids not in the records are rejected; refusals stay rule-based; errors fall back to the rules. The service account needs `roles/aiplatform.user`. |
 | Evidence integrity | `TAAD_KMS_SIGNING_KEY_VERSION` -> Cloud KMS signs every runtime evidence record; signing failure blocks the action. Verified against the real key. |
 | Malware scanning | `TAAD_CLAMD_HOST` -> ClamAV INSTREAM; mandatory when configured (scanner down = upload rejected). |
 

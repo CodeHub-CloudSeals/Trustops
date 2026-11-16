@@ -822,15 +822,15 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
     @router.post("/v1/assistant/ask")
     def assistant_ask(body: dict = Body(...), p=Depends(principal)):
         need(p, READ)
-        from .assistant import answer
+        from .assistant import answer, model_client
         q = body.get("question")
         if not isinstance(q, str) or not q.strip():
             raise _err(422, "invalid_request", "question is required")
-        recs = db.all(p.tenant_id)
+        recs = db.all(p.tenant_id)   # this workspace only: nothing from another workspace can reach the answer or a model
         out = answer(q, records=recs, rules=db.rules(p.tenant_id), verification=verify_chain(recs),
-                     me={p.sub, identity(p) if identity else p.sub}, roles=p.roles, approvers=APPROVERS)
-        if audit:   # who asked and how it was answered; the question text itself is not stored
-            audit(p, "assistant.ask", out["status"])
+                     me={p.sub, identity(p) if identity else p.sub}, roles=p.roles, approvers=APPROVERS, model=model_client())
+        if audit:   # who asked, how it was answered and whether a model was used; the question and answer text are not stored
+            audit(p, "assistant.ask", out["status"], {"written_by": out["written_by"], "model": out["model"]})
         return out
 
     # ---- notifications: what happened in the decision log that this person should know about ----

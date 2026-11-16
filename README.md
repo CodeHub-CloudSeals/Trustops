@@ -64,6 +64,13 @@ Cloud Run on GCP — see [docs/GCP_DEPLOYMENT.md](docs/GCP_DEPLOYMENT.md) and `i
 In hosted environments set `TRUSTOPS_INTEGRATION_KEY` (a Fernet key from Secret Manager) so
 application credentials can be stored encrypted; without it TrustOps refuses to store them.
 
+TrustTwin (the console assistant) answers greetings and help without any model. Set
+`TRUSTOPS_ASSISTANT_MODEL=vertex` to let Gemini (Vertex AI, `TAAD_VERTEX_MODEL` in `TAAD_VERTEX_LOCATION`) route free-form
+questions and phrase the answer. Every fact still comes from the decision records by fixed rules; a reply with any number
+or id that is not in those records is discarded for the rules' own text, requests to act are refused before the model is
+asked, and any model error or timeout (`TRUSTOPS_ASSISTANT_TIMEOUT`, default 8 s) falls back silently. This switch is
+separate from `TAAD_LLM_PROVIDER` and changes nothing else.
+
 ## Known limits
 
 - Evidence is a SHA-256 hash chain; KMS signing is used only when a key is configured.
