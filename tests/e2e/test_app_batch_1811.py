@@ -57,3 +57,16 @@ def test_reuse_pending_never_creates_a_second_copy(env):
     c.post(f"/v1/decisions/{other['decision_id']}/resolve", headers=h("controller@t-bank"), json={"outcome": "reject", "reason": "dup"})
     third = c.post("/v1/decisions", headers=k, json=body(ref, assign_to="controller@t-bank", reuse_pending=True)).json()
     assert third["decision_id"] not in (first["decision_id"], other["decision_id"]) and not third.get("reused")
+
+
+def test_policy_tests_are_never_waiting_for_approval(env):
+    c, h = env
+    sim = c.post("/v1/decisions/simulate", headers=h("admin@t-bank"), json={
+        "actor": {"type": "human", "id": "someone@t-bank"}, "action": "submit_for_review", "amount_minor": 50_000})
+    assert sim.status_code == 200 and sim.json()["decision"] == "ESCALATE"
+    pending = c.get("/v1/decisions?pending=true", headers=h("controller@t-bank")).json()["items"]
+    assert sim.json()["decision_id"] not in {r["id"] for r in pending}
+    before = c.get("/v1/decisions-stats", headers=h("admin@t-bank")).json()["pending_approvals"]
+    key = key_for(c, h)
+    c.post("/v1/decisions", headers={"X-TrustOps-Key": key}, json=body("client-a|RUN-0001|EX-001"))
+    assert c.get("/v1/decisions-stats", headers=h("admin@t-bank")).json()["pending_approvals"] == before + 1
