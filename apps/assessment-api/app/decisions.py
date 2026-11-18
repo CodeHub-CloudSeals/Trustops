@@ -202,6 +202,14 @@ class DecisionStore:
         with self.state.lock:
             return next((dict(r) for r in self.state.decisions if r["tenant_id"] == tenant and r["id"] == did), None)
 
+    def pending_for(self, tenant, app_id, resource, action):
+        """The item from this application for this resource + action that is still waiting for a person, if any."""
+        with self.state.lock:
+            return next((dict(r) for r in reversed(self.state.decisions)
+                         if r["tenant_id"] == tenant and r["application"]["id"] == app_id and r.get("resource") == resource
+                         and r["action"] == action and r["decision"] == "ESCALATE" and not r.get("resolution")
+                         and not r.get("simulated")), None)
+
     # authority registry
     @staticmethod
     def agent_id(tenant, app_id, actor_type, actor_id):
@@ -518,6 +526,18 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if amount is not None and (not isinstance(amount, int) or amount < 0):
             raise _err(422, "invalid_amount", "amount_minor must be a non-negative integer")
         client = str(body.get("client", ""))[:120] or None
+        resource = str(body.get("resource", ""))[:200] or None
+        # 18/11 (items "not received"): an application that timed out may send the same item again. With reuse_pending,
+        # an item for this resource that is still waiting is returned (and re-pointed to the chosen approver) instead of
+        # a second copy being created.
+        if body.get("reuse_pending") and resource and not simulated:
+            old = db.pending_for(tenant, application["id"], resource, action)
+            if old:
+                if "assign_to" in body and (str(body.get("assign_to") or "").strip().lower() or None) != (old.get("assignment") or {}).get("to"):
+                    assign(tenant, old["id"], body.get("assign_to"), by or application["name"], app_id=application["id"])
+                return {"decision_id": old["id"], "decision": old["decision"], "policy_id": old["policy_id"], "reason": old["reason"],
+                        "status": "pending_approval", "evidence_hash": old["record_hash"], "evidence_sequence": old["sequence"],
+                        "assigned_to": (db.get(tenant, old["id"]).get("assignment") or {}).get("to"), "reused": True}
         details = parse_details(body)
         # Only agents and services go into the authority registry (16/11: people showed up there as "agents").
         ident = None if simulated or a_type == "human" else db.touch_agent(tenant, application, {"type": a_type, "id": a_id[:120]})
@@ -545,7 +565,8 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             db.count_agent(ident["id"], decision)
         return {"decision_id": rec["id"], "decision": decision, "policy_id": policy, "reason": reason,
                 "status": "pending_approval" if decision == "ESCALATE" else "final",
-                "evidence_hash": rec["record_hash"], "evidence_sequence": rec["sequence"]}
+                "evidence_hash": rec["record_hash"], "evidence_sequence": rec["sequence"],
+                "assigned_to": (rec.get("assignment") or {}).get("to")}
 
     def reviewer_list(tenant):
         return reviewers(tenant) if reviewers else []
@@ -642,6 +663,28 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
         tenant, integ = found
         return decide(tenant, {"id": integ["id"], "name": integ["name"]}, body, False)
+
+    # 18/11 (items "not received"): an application sends many items in one request. Every item is checked exactly like
+    # POST /v1/decisions and recorded on its own; one item failing never stops the others. The state is stored once for
+    # the whole request (instead of once per item), so 70+ items no longer take minutes and time out one by one.
+    @router.post("/v1/decisions/batch")
+    def app_decision_batch(body: dict = Body(...), x_trustops_key: Optional[str] = Header(default=None)):
+        found = find_integration_by_key(x_trustops_key or "")
+        if not found:
+            raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
+        items = body.get("items")
+        if not isinstance(items, list) or not items or len(items) > BULK_MAX or not all(isinstance(x, dict) for x in items):
+            raise _err(422, "invalid_request", f"Send between 1 and {BULK_MAX} items")
+        tenant, integ = found
+        app = {"id": integ["id"], "name": integ["name"]}
+        results = []
+        for one in items:
+            try:
+                results.append({"ok": True, **decide(tenant, app, one, False)})
+            except HTTPException as e:
+                d = e.detail if isinstance(e.detail, dict) else {"code": "error", "message": str(e.detail)}
+                results.append({"ok": False, "status": e.status_code, "error": d.get("code"), "message": d.get("message")})
+        return {"results": results}
 
     @router.get("/v1/decisions/{did}/status")
     def app_status(did: str, x_trustops_key: Optional[str] = Header(default=None)):
