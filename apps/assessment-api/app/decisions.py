@@ -323,7 +323,8 @@ def stats(records):
     return {"total": n, "simulated": sum(bool(r.get("simulated")) for r in records), "counts": count,
             "escalation_rate": round(count["ESCALATE"] / n, 3) if n else None,
             "deny_rate": round(count["DENY"] / n, 3) if n else None,
-            "pending_approvals": sum(r["decision"] == "ESCALATE" and not r.get("resolution") for r in records),
+            # 18/11: a policy test (simulated) that escalates never needs a person; only real items are waiting
+            "pending_approvals": sum(r["decision"] == "ESCALATE" and not r.get("resolution") for r in real),
             "repeated_denials": [{"actor": k, "denials": v} for k, v in sorted(by_actor.items(), key=lambda x: -x[1]) if v >= 3],
             "by_application": by_app, "by_policy": by_policy,
             "cost_per_run": None, "cost_note": "Model cost is not tracked yet"}
@@ -722,7 +723,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if application:
             rows = [r for r in rows if r["application"]["id"] == application]
         if pending:
-            rows = [r for r in rows if r["decision"] == "ESCALATE" and not r.get("resolution")]
+            rows = [r for r in rows if r["decision"] == "ESCALATE" and not r.get("resolution") and not r.get("simulated")]
         if not include_simulated:
             rows = [r for r in rows if not r.get("simulated")]
         if q:
