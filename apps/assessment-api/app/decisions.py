@@ -20,7 +20,7 @@ import time
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 
 ADMIN = {"customer_admin", "cloudseals_admin"}
 APPROVERS = {"customer_controller", "customer_admin"}
@@ -59,6 +59,73 @@ DEFAULT_RULES = [
      "reason": "Read-only actions are permitted", "enabled": True},
 ]
 DEFAULT_ID = "DEFAULT"
+# Version of DEFAULT_RULES. A workspace that saved its own rules keeps them, but rules added to the defaults after it
+# saved are added to it once (16/11: workspaces saved before LS-01/LS-02 existed escalated every LedgerSight agent
+# step). A rule an administrator deletes after that is never added back: only rules newer than the workspace's
+# recorded version are considered.
+DEFAULTS_VERSION = 2
+RULE_ADDED_IN = {"LS-01": 2, "LS-02": 2}          # every other default rule: version 1
+
+
+def upgrade_rules(rules, since):
+    """Rules newer than `since` that are missing, inserted where they sit in DEFAULT_RULES. Returns (rules, added ids)."""
+    have = {r["id"] for r in rules}
+    out, added = [dict(r) for r in rules], []
+    for i, d in enumerate(DEFAULT_RULES):
+        if RULE_ADDED_IN.get(d["id"], 1) <= since or d["id"] in have:
+            continue
+        after = next((x["id"] for x in DEFAULT_RULES[i + 1:] if x["id"] in have or x["id"] in added), None)
+        pos = next((k for k, r in enumerate(out) if r["id"] == after), len(out)) if after else len(out)
+        out.insert(pos, dict(d))
+        added.append(d["id"])
+    return out, added
+
+
+def fmt_time(t, seconds=False):
+    """One date format across TrustOps and LedgerSight (16/11): "16 Nov 2026, 14:05". Server output is UTC."""
+    return time.strftime("%d %b %Y, %H:%M:%S" if seconds else "%d %b %Y, %H:%M", time.gmtime(t)).lstrip("0") if t else "–"
+
+
+def describe_change(e):
+    """A plain sentence for one Authority 'Recent changes' entry (16/11: the raw action codes were not clear)."""
+    a, ref, d = str(e.get("action", "")), str(e.get("ref") or ""), e.get("detail") or {}
+    if a.startswith("authority.agent."):
+        agent = d.get("agent") or ref.split("@")[0]
+        app = f' in {d["application"]}' if d.get("application") else (f' in {ref.split("@", 1)[1]}' if "@" in ref else "")
+        parts = []
+        for c in a[len("authority.agent."):].split("+"):
+            if c == "status=suspended":
+                parts.append(f"Suspended {agent}{app}" + (f" — reason: {d['reason']}" if d.get("reason") else ""))
+            elif c == "status=active":
+                parts.append(f"Resumed {agent}{app}")
+            elif c == "client_scope":
+                cl = d.get("allowed_clients")
+                parts.append(f"Limited {agent}{app} to {', '.join(cl)}" if cl else f"Allowed {agent}{app} to act for all clients" if cl is not None
+                             else f"Changed which clients {agent}{app} may act for")
+            elif c == "owner":
+                parts.append(f"Set the owner of {agent}{app} to {d['owner']}" if d.get("owner") else f"Cleared the owner of {agent}{app}")
+        return "; ".join(parts) or f"Changed {agent}{app}"
+    if a == "policy.update":
+        bits = [f"{label} {', '.join(d[k])}" for k, label in (("added", "added"), ("changed", "changed"), ("removed", "removed")) if d.get(k)]
+        return "Saved the policies" + (f": {'; '.join(bits)}" if bits else " (no rule changed)" if d else "")
+    if a == "policy.reset":
+        return "Reset the policies to the Finance pack defaults"
+    if a == "policy.defaults_added":
+        return f"TrustOps added new default rules to this workspace: {ref.replace(',', ', ')}"
+    if a.startswith("decision.resolve."):
+        verb = "Approved" if a.endswith("approve") else "Rejected"
+        return f"{verb} “{d['title']}”" if d.get("title") else f"{verb} escalation {ref}"
+    if a == "decision.assign":
+        what = f"“{d['title']}”" if d.get("title") else ref
+        return f"Assigned {what} to {d['to']}" if d.get("to") else f"Opened {what} to any approver"
+    if a.startswith("integration."):
+        name = d.get("name") or (ref.split(":", 1)[1] if ":" in ref and a == "integration.create" else "an application")
+        return {"integration.create": f"Registered the application {name}", "integration.rotate_key": f"Issued a new key for {name}",
+                "integration.update": f"Changed the settings of {name}" + (f" ({', '.join(d['fields'])})" if d.get("fields") else ""),
+                "integration.delete": f"Removed the application {name}",
+                "integration.test": f"Tested the connection to {name}" + (f": {'reachable' if ref.endswith(':ok') else 'failed'}" if ":" in ref else ""),
+                }.get(a, f"Changed {name}")
+    return a.replace(".", " ")
 
 
 def _err(status, code, message):
@@ -66,7 +133,7 @@ def _err(status, code, message):
 
 
 # Fields that change after a record is written (who resolved it, details loaded later, who it is assigned to).
-UNHASHED = ("record_hash", "resolution", "loaded_details", "assignment")
+UNHASHED = ("record_hash", "resolution", "loaded_details", "assignment", "attachments")
 
 
 def digest(obj) -> str:
@@ -79,6 +146,9 @@ class _Mem:
         self.decisions, self.policy_rules, self.agents, self.users, self.audit = [], {}, {}, {}, []
 
 
+META = "__meta__"   # policy_rules[tenant + META] = {"defaults_version": n}; kept beside the rules so no new state field is needed
+
+
 class DecisionStore:
     """Decisions and rules live in the shared Store (persisted with the rest of TrustOps state)."""
 
@@ -88,11 +158,24 @@ class DecisionStore:
     def rules(self, tenant):
         with self.state.lock:
             r = self.state.policy_rules.get(tenant)
-        return [dict(x) for x in r] if r else [dict(x) for x in DEFAULT_RULES]
+            if not r:
+                return [dict(x) for x in DEFAULT_RULES]
+            meta = self.state.policy_rules.get(tenant + META) or {}
+            # Saved before versions were recorded: if it already has a version-2 rule it was saved with them.
+            since = meta.get("defaults_version") or (2 if any(x["id"] in RULE_ADDED_IN for x in r) else 1)
+            if since < DEFAULTS_VERSION:
+                r, added = upgrade_rules(r, since)
+                self.state.policy_rules[tenant] = r
+                self.state.policy_rules[tenant + META] = {"defaults_version": DEFAULTS_VERSION}
+                if added and hasattr(self.state, "audit"):
+                    self.state.audit.append({"at": time.time(), "sub": "TrustOps", "tenant_id": tenant, "action": "policy.defaults_added",
+                                             "ref": ",".join(added), "detail": {"added": added}})
+            return [dict(x) for x in r]
 
     def set_rules(self, tenant, rules):
         with self.state.lock:
             self.state.policy_rules[tenant] = [dict(x) for x in rules]
+            self.state.policy_rules[tenant + META] = {"defaults_version": DEFAULTS_VERSION}
 
     def append(self, tenant, record):
         with self.state.lock:
@@ -118,6 +201,14 @@ class DecisionStore:
     def get(self, tenant, did):
         with self.state.lock:
             return next((dict(r) for r in self.state.decisions if r["tenant_id"] == tenant and r["id"] == did), None)
+
+    def pending_for(self, tenant, app_id, resource, action):
+        """The item from this application for this resource + action that is still waiting for a person, if any."""
+        with self.state.lock:
+            return next((dict(r) for r in reversed(self.state.decisions)
+                         if r["tenant_id"] == tenant and r["application"]["id"] == app_id and r.get("resource") == resource
+                         and r["action"] == action and r["decision"] == "ESCALATE" and not r.get("resolution")
+                         and not r.get("simulated")), None)
 
     # authority registry
     @staticmethod
@@ -238,98 +329,186 @@ def stats(records):
             "cost_per_run": None, "cost_note": "Model cost is not tracked yet"}
 
 
-def render_pdf(tenant_name, generated_by, records, rules, verification):
-    """Governance report as PDF: summary, policies, items needing attention, decision log, integrity."""
+def render_pdf(tenant_name, generated_by, records, rules, verification, scope=None):
+    """Governance report as PDF (2026-11-13 layout): cover summary, outcomes, policies, items needing attention,
+    the decision log and integrity. Every table spans the full text width; long values wrap inside their cell;
+    times are UTC. `scope` describes a filtered download (who / what / when) and is printed under the title."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
+    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reporting import LOGO_PNG, logo_header
 
-    ink, panel, line = colors.HexColor("#172B4D"), colors.HexColor("#F0F3F9"), colors.HexColor("#E6EAF1")
-    tone = {"ALLOW": colors.HexColor("#067647"), "ESCALATE": colors.HexColor("#B54708"), "DENY": colors.HexColor("#B42318")}
+    PAGE = landscape(A4)
+    M = 14 * mm
+    W = PAGE[0] - 2 * M                                   # usable width; every table is sized to exactly this
+    ink, muted, line, band = colors.HexColor("#172B4D"), colors.HexColor("#5F6B80"), colors.HexColor("#E3E8F0"), colors.HexColor("#F2F5FA")
+    tone = {"ALLOW": colors.HexColor("#0F7F52"), "ESCALATE": colors.HexColor("#9A6210"), "DENY": colors.HexColor("#C03D3D"),
+            "APPROVED": colors.HexColor("#0F7F52"), "REJECTED": colors.HexColor("#C03D3D"), "PENDING": colors.HexColor("#9A6210")}
     ss = getSampleStyleSheet()
-    H1 = ParagraphStyle("h1", parent=ss["Title"], textColor=ink, alignment=0, fontSize=22, spaceAfter=4)
-    H2 = ParagraphStyle("h2", parent=ss["Heading2"], textColor=ink, fontSize=13, spaceBefore=10, spaceAfter=6)
-    B = ParagraphStyle("b", parent=ss["BodyText"], fontSize=9, leading=12, textColor=colors.HexColor("#344054"))
-    S = ParagraphStyle("s", parent=B, fontSize=7.5, leading=9.5)
+    H1 = ParagraphStyle("h1", parent=ss["Title"], textColor=ink, alignment=0, fontSize=22, leading=26, spaceAfter=2)
+    H2 = ParagraphStyle("h2", parent=ss["Heading2"], textColor=ink, fontSize=13, leading=16, spaceBefore=12, spaceAfter=6, keepWithNext=1)
+    B = ParagraphStyle("b", parent=ss["BodyText"], fontName="Helvetica", fontSize=9, leading=12, textColor=colors.HexColor("#344054"))
+    S = ParagraphStyle("s", parent=B, fontSize=7.6, leading=9.6)
+    SB = ParagraphStyle("sb", parent=S, fontName="Helvetica-Bold", textColor=ink)
+    HD = ParagraphStyle("hd", parent=S, fontName="Helvetica-Bold", textColor=muted, fontSize=7.2, leading=9)
+    MONO = ParagraphStyle("mono", parent=S, fontName="Courier", fontSize=7, leading=9, textColor=muted)
+    KV = ParagraphStyle("kv", parent=B, fontSize=8, leading=10, textColor=muted)
+    KN = ParagraphStyle("kn", parent=B, fontName="Helvetica-Bold", fontSize=15, leading=18, textColor=ink)
     esc = lambda t: (str(t if t is not None else "–")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    when = lambda t: time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(t))
-    amt = lambda r: "–" if r.get("amount_minor") is None else f'{r["amount_minor"] / 100:,.2f} {r.get("currency") or ""}'
+    when = fmt_time                                      # "16 Nov 2026, 14:05" (UTC), the console's format
+    amt = lambda r: "–" if r.get("amount_minor") is None else f'{r["amount_minor"] / 100:,.2f} {r.get("currency") or ""}'.strip()
+    who = lambda r: (f'Agent {r["actor"]["id"].split(":", 1)[1]}' if r["actor"]["id"].startswith("agent:") else f'Agent {r["actor"]["id"]}') \
+        if r["actor"]["type"] == "agent" else r["actor"]["id"]
     fin = lambda r: ({"approve": "APPROVED", "reject": "REJECTED"}[r["resolution"]["outcome"]] if r.get("resolution")
                      else "PENDING" if r["decision"] == "ESCALATE" else r["decision"])
+    col = lambda word: f'<font color="{tone[word].hexval().replace("0x", "#")}"><b>{word}</b></font>' if word in tone else esc(word)
+    P = lambda t, st=S: Paragraph(esc(t), st)
 
-    def grid(data, widths, header=True):
-        t = Table(data, colWidths=widths, repeatRows=1 if header else 0, hAlign="LEFT")
-        st = [("FONTSIZE", (0, 0), (-1, -1), 8), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-              ("LINEBELOW", (0, 0), (-1, -1), 0.4, line), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
-        if header:
-            st += [("BACKGROUND", (0, 0), (-1, 0), panel), ("TEXTCOLOR", (0, 0), (-1, 0), ink), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold")]
+    def grid(head, rows, fracs, zebra=True):
+        """A full-width table: `fracs` are relative column widths (they are scaled to the text width)."""
+        tot = sum(fracs)
+        t = Table([[Paragraph(h, HD) for h in head]] + rows, colWidths=[W * f / tot for f in fracs], repeatRows=1, hAlign="LEFT")
+        st = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+              ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+              ("BACKGROUND", (0, 0), (-1, 0), band), ("LINEBELOW", (0, 0), (-1, 0), 0.6, line), ("LINEBELOW", (0, 1), (-1, -1), 0.3, line)]
+        if zebra:
+            st += [("BACKGROUND", (0, i), (-1, i), colors.HexColor("#FAFBFD")) for i in range(2, len(rows) + 1, 2)]
         t.setStyle(TableStyle(st))
         return t
 
     real = [r for r in records if not r.get("simulated") and not r["action"].startswith("resolve_escalation:") and r["action"] != "load_review_details"]
     st = stats(records)
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
+    doc = SimpleDocTemplate(buf, pagesize=PAGE, leftMargin=M, rightMargin=M, topMargin=18 * mm, bottomMargin=15 * mm,
                             title="TrustOps governance report", author="CloudSeals TrustOps")
 
-    def footer(canvas, d):
+    def chrome(canvas, d, first):
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
-        canvas.setFillColor(colors.HexColor("#667085"))
-        canvas.drawString(14 * mm, 8 * mm, f"CloudSeals TrustOps · Governance report · {esc(tenant_name)} · Records describe recorded activity only; this is not a compliance certification.")
-        canvas.drawRightString(landscape(A4)[0] - 14 * mm, 8 * mm, f"Page {d.page}")
+        canvas.setStrokeColor(line)
+        if not first:                                   # running header on every page after the first
+            x = M
+            try:
+                if LOGO_PNG.is_file():
+                    canvas.drawImage(str(LOGO_PNG), x, PAGE[1] - 12.5 * mm, width=6 * mm, height=6 * mm, mask="auto"); x += 8 * mm
+            except Exception:
+                pass
+            canvas.setFont("Helvetica-Bold", 8.5); canvas.setFillColor(ink)
+            canvas.drawString(x, PAGE[1] - 10.5 * mm, "TrustOps governance report")
+            canvas.setFont("Helvetica", 8); canvas.setFillColor(muted)
+            canvas.drawRightString(PAGE[0] - M, PAGE[1] - 10.5 * mm, f"{tenant_name} · generated {when(time.time())} UTC")
+            canvas.line(M, PAGE[1] - 14 * mm, PAGE[0] - M, PAGE[1] - 14 * mm)
+        canvas.line(M, 11 * mm, PAGE[0] - M, 11 * mm)
+        fx = M
+        try:
+            if LOGO_PNG.is_file():
+                canvas.drawImage(str(LOGO_PNG), fx, 6.2 * mm, width=4 * mm, height=4 * mm, mask="auto"); fx += 5.5 * mm
+        except Exception:
+            pass
+        canvas.setFont("Helvetica", 7); canvas.setFillColor(muted)
+        canvas.drawString(fx, 7.5 * mm, f"CloudSeals TrustOps · {tenant_name} · Records describe recorded activity only; this is not a compliance certification.")
+        canvas.drawRightString(PAGE[0] - M, 7.5 * mm, f"Page {d.page}")
         canvas.restoreState()
 
-    story = [Paragraph("TrustOps governance report", H1),
-             Paragraph(f"{esc(tenant_name)} · generated {when(time.time())} by {esc(generated_by)}", B), Spacer(1, 8)]
+    sub = f"{esc(tenant_name)} · generated {when(time.time())} UTC by {esc(generated_by)}"
+    story = logo_header([Paragraph("TrustOps governance report", H1), Paragraph(sub, B)], logo_mm=18, width_mm=W / mm) + [Spacer(1, 8)]
+    if scope:
+        story += [Table([[Paragraph(f"<b>Filtered download</b> · {esc(scope)}", B)]], colWidths=[W],
+                        style=[("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EDF3FF")), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                               ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]), Spacer(1, 8)]
+
+    # summary: six figure boxes in one row
     pct = lambda x: "–" if x is None else f"{round(x * 100)}%"
-    story += [Paragraph("Summary", H2), grid([
-        ["Decisions recorded", str(st["total"]), "Allowed", str(st["counts"]["ALLOW"])],
-        ["Escalated to a person", f'{st["counts"]["ESCALATE"]} ({pct(st["escalation_rate"])})', "Denied", f'{st["counts"]["DENY"]} ({pct(st["deny_rate"])})'],
-        ["Still waiting for a person", str(st["pending_approvals"]), "Simulated tests (excluded)", str(st["simulated"])],
-        ["Evidence chain", ("Intact" if verification["valid"] else f'Broken at {verification.get("broken_at")}') + f' · {verification["checked"]} records',
-         "Integrity", "SHA-256 hash chain (not KMS signed)"],
-        ["Cost per run", "Not tracked yet", "Applications", ", ".join(st["by_application"]) or "–"],
-    ], [55 * mm, 80 * mm, 55 * mm, 80 * mm], header=False)]
+    box = lambda n, k: [Paragraph(esc(n), KN), Paragraph(esc(k), KV)]
+    figs = [box(st["total"], "decisions recorded"), box(st["counts"]["ALLOW"], "allowed"),
+            box(f'{st["counts"]["ESCALATE"]}', f'sent to a person ({pct(st["escalation_rate"])})'),
+            box(f'{st["counts"]["DENY"]}', f'blocked ({pct(st["deny_rate"])})'), box(st["pending_approvals"], "still waiting"),
+            box("Intact" if verification["valid"] else "BROKEN", f'evidence chain · {verification["checked"]} records')]
+    kt = Table([[f[0] for f in figs], [f[1] for f in figs]], colWidths=[W / 6] * 6, hAlign="LEFT")
+    kt.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), band), ("LEFTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, 0), 9),
+                            ("BOTTOMPADDING", (0, 1), (-1, 1), 9), ("LINEAFTER", (0, 0), (-2, -1), 3, colors.white)]))
+    story += [Paragraph("Summary", H2), kt, Spacer(1, 4),
+              Paragraph(f'Applications: {esc(", ".join(st["by_application"]) or "–")} · simulated tests excluded from the figures: {st["simulated"]} · '
+                        "integrity: SHA-256 hash chain (not KMS signed) · cost per run: not tracked yet", S)]
     if st["repeated_denials"]:
-        story += [Paragraph("Repeated denials (3 or more)", H2),
-                  grid([["Actor", "Denials"]] + [[esc(x["actor"]), str(x["denials"])] for x in st["repeated_denials"]], [120 * mm, 30 * mm])]
-    story += [Paragraph("Policies in force", H2), grid([["On", "ID", "Rule", "Actions", "Who", "Amount limit", "Decision"]] + [
-        ["Yes" if r.get("enabled", True) else "No", r["id"], Paragraph(esc(r["name"]), S), Paragraph(esc(", ".join(r["actions"])), S),
-         ", ".join(r.get("actor_types") or []) or "anyone",
-         "–" if r.get("min_amount_minor") is None else f'above {r["min_amount_minor"] / 100:,.2f}', r["decision"]] for r in rules],
-        [12 * mm, 20 * mm, 70 * mm, 75 * mm, 25 * mm, 30 * mm, 25 * mm])]
+        story += [KeepTogether([Paragraph("Repeated denials (3 or more)", H2),
+                                grid(["Who", "Denials"], [[P(x["actor"].replace("agent:agent:", "agent:")), P(str(x["denials"]))] for x in st["repeated_denials"]], [5, 1])])]
+
+    story += [Paragraph("Policies in force", H2), grid(["On", "Policy", "Rule", "Actions", "Who", "Amount limit", "Decision"], [
+        [P("Yes" if r.get("enabled", True) else "No"), P(r["id"], SB), P(r["name"]), P(", ".join(r["actions"])),
+         P(", ".join(r.get("actor_types") or []) or "anyone"),
+         P("–" if r.get("min_amount_minor") is None else f'above {r["min_amount_minor"] / 100:,.2f}'), Paragraph(col(r["decision"]), S)] for r in rules],
+        [3, 6, 20, 28, 7, 9, 8])]
+
     attention = [r for r in real if r["decision"] in ("ESCALATE", "DENY")]
     story += [Paragraph(f"Escalations and denials ({len(attention)})", H2)]
-    story += [grid([["Time", "Application", "Actor", "Action", "Amount", "Decision", "Policy", "Outcome", "Resolved by"]] + [
-        [when(r["at"]), Paragraph(esc(r["application"]["name"]), S), Paragraph(esc(f'{r["actor"]["type"]}: {r["actor"]["id"]}'), S),
-         Paragraph(esc(r["action"]), S), amt(r), r["decision"], r["policy_id"], fin(r),
-         Paragraph(esc((r.get("resolution") or {}).get("by", "")), S)] for r in attention],
-        [30 * mm, 35 * mm, 38 * mm, 38 * mm, 25 * mm, 20 * mm, 22 * mm, 22 * mm, 38 * mm])] if attention else [Paragraph("None.", B)]
+    story += [grid(["Time (UTC)", "Application", "Who", "Action", "Amount", "Decision", "Policy", "Outcome", "Decided by"], [
+        [P(when(r["at"])), P(r["application"]["name"]), P(who(r)), P(r["action"]), P(amt(r)), Paragraph(col(r["decision"]), S),
+         P(r["policy_id"]), Paragraph(col(fin(r)), S), P((r.get("resolution") or {}).get("by", ""))] for r in attention],
+        [11, 10, 13, 13, 9, 8, 9, 8, 13])] if attention else [Paragraph("None.", B)]
+
     story += [PageBreak(), Paragraph(f"Decision log ({len(records)} records, including resolutions and simulated tests)", H2)]
-    rows = [["#", "Time", "Application", "Actor", "Action", "Client", "Amount", "Decision", "Policy", "Reason", "Record hash"]]
-    for r in records:
-        rows.append([str(r["sequence"]), when(r["at"]), Paragraph(esc(r["application"]["name"]), S),
-                     Paragraph(esc(f'{r["actor"]["type"]}: {r["actor"]["id"]}'), S), Paragraph(esc(r["action"]), S),
-                     Paragraph(esc(r.get("client")), S), amt(r), r["decision"], r["policy_id"], Paragraph(esc(r["reason"]), S),
-                     Paragraph(r["record_hash"][:16] + "…", S)])
-    log = grid(rows, [9 * mm, 28 * mm, 30 * mm, 32 * mm, 30 * mm, 20 * mm, 22 * mm, 18 * mm, 22 * mm, 40 * mm, 24 * mm])
-    log.setStyle(TableStyle([("TEXTCOLOR", (7, i), (7, i), tone.get(rows[i][7], ink)) for i in range(1, len(rows))]))
-    story += [log, Spacer(1, 10), Paragraph("Integrity", H2), Paragraph(
-        "Each record stores the SHA-256 hash of the previous record. Changing any record breaks every hash after it. "
-        f"Verification at generation time: {'intact' if verification['valid'] else 'BROKEN'} across {verification['checked']} records. "
-        "Records are not signed with a cloud KMS key in this environment. The JSON audit pack contains the full records for independent re-verification.", B)]
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    story += [grid(["#", "Time (UTC)", "Application", "Who", "Action", "Amount", "Decision", "Policy", "Reason", "Record hash"], [
+        [P(str(r["sequence"])), P(when(r["at"])), P(r["application"]["name"]), P(who(r)), P(r["action"].replace("resolve_escalation:", "resolve: ")),
+         P(amt(r)), Paragraph(col(r["decision"]), S), P(r["policy_id"]), P(r["reason"]), Paragraph(r["record_hash"][:12] + "…", MONO)] for r in records],
+        [3, 10, 9, 11, 12, 8, 7, 11, 19, 9])]
+    story += [KeepTogether([Paragraph("Integrity", H2), Paragraph(
+        "Each record stores the SHA-256 hash of the previous record, so changing any record breaks every hash after it. "
+        f"Verification when this report was generated: <b>{'intact' if verification['valid'] else 'BROKEN'}</b> across {verification['checked']} records"
+        f"{' (the whole chain, not only the records in this download)' if scope else ''}. "
+        "Records are not signed with a cloud KMS key in this environment. The JSON audit pack holds the full records for independent re-verification.", B)])]
+    doc.build(story, onFirstPage=lambda c, d: chrome(c, d, True), onLaterPages=lambda c, d: chrome(c, d, False))
     return buf.getvalue()
+
+
+def insights(records, rules, now=None):
+    """Overview charts (2026-11-13): decision mix, approval outcomes, time to decide, policies that decide most."""
+    now = now or time.time()
+    real = [r for r in records if not r.get("simulated") and not r["action"].startswith("resolve_escalation:") and r["action"] != "load_review_details"]
+    mix = {d: sum(r["decision"] == d for r in real) for d in DECISIONS}
+    esc = [r for r in real if r["decision"] == "ESCALATE"]
+    res = [r for r in esc if r.get("resolution")]
+    outcomes = {"approved": sum(r["resolution"]["outcome"] == "approve" for r in res),
+                "rejected": sum(r["resolution"]["outcome"] == "reject" for r in res), "waiting": len(esc) - len(res)}
+    hours = sorted(max(0.0, (r["resolution"]["at"] - r["at"]) / 3600) for r in res)
+    pick = lambda q: round(hours[min(len(hours) - 1, int(q * (len(hours) - 1) + 0.5))], 1) if hours else None
+    waiting_ages = [(now - r["at"]) / 3600 for r in esc if not r.get("resolution")]
+    names = {x["id"]: x["name"] for x in rules}
+    by_policy = {}
+    for r in real:
+        by_policy[r["policy_id"]] = by_policy.get(r["policy_id"], 0) + 1
+    top = sorted(by_policy.items(), key=lambda kv: -kv[1])
+    policies = [{"id": k, "name": names.get(k, "No policy covered it" if k == DEFAULT_ID else k), "count": v} for k, v in top[:4]]
+    if len(top) > 4:
+        policies.append({"id": "OTHER", "name": f"{len(top) - 4} other policies", "count": sum(v for _, v in top[4:])})
+    return {"total": len(real), "mix": mix, "outcomes": outcomes,
+            "turnaround": {"decided": len(hours), "median_hours": pick(0.5), "p90_hours": pick(0.9), "target_hours": 24,
+                           "within_target": sum(h <= 24 for h in hours), "oldest_waiting_hours": round(max(waiting_ages), 1) if waiting_ages else None},
+            "policies": policies,
+            "actors": {t: sum(r["actor"]["type"] == t for r in real) for t in ("agent", "human", "service")}}
 
 
 def _public(r):
     return r
 
 
-def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None, reviewers=None):
+# Files an approver attaches to an item waiting for them (2026-11-13 action items: "Upload button for reviewers").
+ATTACH_TYPES = {"application/pdf", "text/plain", "text/csv", "application/json", "image/png", "image/jpeg",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+ATTACH_MAX = 10 * 1024 * 1024
+ATTACH_PER_ITEM = 10
+_BAD_NAME = set('<>:"|?*')
+
+
+def _safe_name(filename):
+    base = str(filename or "").replace("\\", "/").split("/")[-1]
+    return "".join(ch for ch in base if ch.isprintable() and ch not in _BAD_NAME).strip()[:120] or "file"
+
+
+def make_router(principal, find_integration_by_key, audit=None, identity=None, store=None, state=None, tenant_name=None, integrations=None, reviewers=None,
+                files=None):
     router = APIRouter(tags=["Decisions"])
     db = store or DecisionStore(state)
 
@@ -347,8 +526,21 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if amount is not None and (not isinstance(amount, int) or amount < 0):
             raise _err(422, "invalid_amount", "amount_minor must be a non-negative integer")
         client = str(body.get("client", ""))[:120] or None
+        resource = str(body.get("resource", ""))[:200] or None
+        # 18/11 (items "not received"): an application that timed out may send the same item again. With reuse_pending,
+        # an item for this resource that is still waiting is returned (and re-pointed to the chosen approver) instead of
+        # a second copy being created.
+        if body.get("reuse_pending") and resource and not simulated:
+            old = db.pending_for(tenant, application["id"], resource, action)
+            if old:
+                if "assign_to" in body and (str(body.get("assign_to") or "").strip().lower() or None) != (old.get("assignment") or {}).get("to"):
+                    assign(tenant, old["id"], body.get("assign_to"), by or application["name"], app_id=application["id"])
+                return {"decision_id": old["id"], "decision": old["decision"], "policy_id": old["policy_id"], "reason": old["reason"],
+                        "status": "pending_approval", "evidence_hash": old["record_hash"], "evidence_sequence": old["sequence"],
+                        "assigned_to": (db.get(tenant, old["id"]).get("assignment") or {}).get("to"), "reused": True}
         details = parse_details(body)
-        ident = None if simulated else db.touch_agent(tenant, application, {"type": a_type, "id": a_id[:120]})
+        # Only agents and services go into the authority registry (16/11: people showed up there as "agents").
+        ident = None if simulated or a_type == "human" else db.touch_agent(tenant, application, {"type": a_type, "id": a_id[:120]})
         if ident and ident["status"] == "suspended":
             decision, policy, reason = "DENY", "AUTH-SUSPENDED", "This identity is suspended in the TrustOps authority registry"
         elif ident and ident["allowed_clients"] and client not in ident["allowed_clients"]:
@@ -365,13 +557,16 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                "decision": decision, "policy_id": policy, "reason": reason,
                "simulated": simulated, "requested_by": by}
         if decision == "ESCALATE":
-            rec["assignment"] = {"to": check_reviewer(tenant, body.get("assign_to")), "by": by or f"{application['name']}", "at": time.time(), "history": []}
+            to = check_reviewer(tenant, body.get("assign_to"))
+            check_not_requester(rec, to)
+            rec["assignment"] = {"to": to, "by": by or f"{application['name']}", "at": time.time(), "history": []}
         rec = db.append(tenant, rec)
         if ident:
             db.count_agent(ident["id"], decision)
         return {"decision_id": rec["id"], "decision": decision, "policy_id": policy, "reason": reason,
                 "status": "pending_approval" if decision == "ESCALATE" else "final",
-                "evidence_hash": rec["record_hash"], "evidence_sequence": rec["sequence"]}
+                "evidence_hash": rec["record_hash"], "evidence_sequence": rec["sequence"],
+                "assigned_to": (rec.get("assignment") or {}).get("to")}
 
     def reviewer_list(tenant):
         return reviewers(tenant) if reviewers else []
@@ -382,6 +577,15 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             raise _err(422, "not_a_reviewer", "This person is not an Admin or Approver in TrustOps")
         return email
 
+    def requesters(r):
+        return {str(x).strip().lower() for x in (r["actor"]["id"], r.get("requested_by")) if x}
+
+    def check_not_requester(r, to):
+        """Maker-checker for assignment (16/11): the person who sent an item can never be the one named to approve it."""
+        if to and to in requesters(r):
+            raise _err(422, "requester_cannot_approve",
+                       f"{to} sent this item, so they cannot be its approver. Choose a different Admin or Approver.")
+
     def assign(tenant, did, to, by, app_id=None):
         r = db.get(tenant, did)
         if not r or (app_id and r["application"]["id"] != app_id):
@@ -389,11 +593,52 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if r["decision"] != "ESCALATE" or r.get("resolution"):
             raise _err(409, "not_pending", "This item is no longer waiting for review")
         to = check_reviewer(tenant, to)
+        check_not_requester(r, to)
         prev = r.get("assignment") or {"history": []}
         r["assignment"] = {"to": to, "by": by, "at": time.time(),
                            "history": (prev.get("history") or []) + ([{k: prev.get(k) for k in ("to", "by", "at")}] if "at" in prev else [])}
         db.update(tenant, r)
         return {"decision_id": did, "assigned_to": to}
+
+    def resolve_one(p, r, outcome, reason, checked):
+        """Approve or reject one escalated item. Same checks for the single and the bulk endpoint."""
+        if r["decision"] != "ESCALATE" or r.get("resolution"):
+            raise _err(409, "not_pending", "This decision is not waiting for a person")
+        who = identity(p) if identity else p.sub
+        mine = {str(who).lower(), str(p.sub).lower()}
+        own = bool(mine & requesters(r))
+        # Approvers can never resolve their own items. Administrators can, only when nobody is named, and the record says so.
+        if own and "customer_admin" not in p.roles:
+            raise _err(403, "maker_checker_violation", "The requester cannot approve their own action")
+        to = (r.get("assignment") or {}).get("to")
+        # A named approver is binding (16/11): anyone else must reassign it first, which is recorded.
+        if to and to not in mine:
+            raise _err(403, "assigned_to_someone_else",
+                       f"This item is assigned to {to}. Only they can decide it; reassign it to yourself first if you need to.")
+        reason = str(reason or "").strip()
+        if outcome not in ("approve", "reject") or not reason:
+            raise _err(422, "invalid_request", "outcome (approve|reject) and a reason are required")
+        d = r.get("details") or {}
+        ld = r.get("loaded_details") or {}
+        has_details = bool(d.get("facts") or d.get("lines") or d.get("compare") or ld.get("facts") or ld.get("lines") or ld.get("compare"))
+        checked = bool(checked)
+        if outcome == "approve" and not has_details and not (checked and d.get("link")):
+            raise _err(409, "details_required", "This item has no details. Check it in the application (link required) or reject it and ask for details")
+        r["resolution"] = {"outcome": outcome, "reason": reason[:2000], "by": who, "at": time.time(),
+                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none"),
+                           "self_resolved": own}
+        db.update(p.tenant_id, r)
+        db.append(p.tenant_id, {"id": "dec_" + uuid.uuid4().hex[:16], "at": time.time(), "tenant_id": p.tenant_id,
+                                "application": r["application"], "actor": {"type": "human", "id": who},
+                                "action": f"resolve_escalation:{outcome}", "resource": r["id"], "client": r.get("client"),
+                                "amount_minor": r.get("amount_minor"), "currency": r.get("currency"), "context": {"reason": reason[:500]},
+                                "decision": "ALLOW", "policy_id": "MAKER-CHECKER",
+                                "reason": (f"Escalation {r['id']} {outcome}d by the administrator who submitted it (self-approval)" if own
+                                           else f"Escalation {r['id']} {outcome}d by a different person"),
+                                "simulated": r.get("simulated", False), "requested_by": who})
+        if audit:
+            audit(p, f"decision.resolve.{outcome}", r["id"], {"title": d.get("title"), "application": r["application"]["name"]})
+        return r
 
     # ---- applications call this ----
     @router.get("/v1/reviewers")
@@ -418,6 +663,28 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
         tenant, integ = found
         return decide(tenant, {"id": integ["id"], "name": integ["name"]}, body, False)
+
+    # 18/11 (items "not received"): an application sends many items in one request. Every item is checked exactly like
+    # POST /v1/decisions and recorded on its own; one item failing never stops the others. The state is stored once for
+    # the whole request (instead of once per item), so 70+ items no longer take minutes and time out one by one.
+    @router.post("/v1/decisions/batch")
+    def app_decision_batch(body: dict = Body(...), x_trustops_key: Optional[str] = Header(default=None)):
+        found = find_integration_by_key(x_trustops_key or "")
+        if not found:
+            raise _err(401, "invalid_key", "A valid X-TrustOps-Key is required")
+        items = body.get("items")
+        if not isinstance(items, list) or not items or len(items) > BULK_MAX or not all(isinstance(x, dict) for x in items):
+            raise _err(422, "invalid_request", f"Send between 1 and {BULK_MAX} items")
+        tenant, integ = found
+        app = {"id": integ["id"], "name": integ["name"]}
+        results = []
+        for one in items:
+            try:
+                results.append({"ok": True, **decide(tenant, app, one, False)})
+            except HTTPException as e:
+                d = e.detail if isinstance(e.detail, dict) else {"code": "error", "message": str(e.detail)}
+                results.append({"ok": False, "status": e.status_code, "error": d.get("code"), "message": d.get("message")})
+        return {"results": results}
 
     @router.get("/v1/decisions/{did}/status")
     def app_status(did: str, x_trustops_key: Optional[str] = Header(default=None)):
@@ -447,7 +714,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
     @router.get("/v1/decisions")
     def list_decisions(decision: Optional[str] = None, q: Optional[str] = None, application: Optional[str] = None,
                        pending: bool = False, include_simulated: bool = True, limit: int = Query(200, ge=1, le=1000),
-                       p=Depends(principal)):
+                       full: bool = False, p=Depends(principal)):
         need(p, READ)
         rows = list(reversed(db.all(p.tenant_id)))
         if decision:
@@ -461,7 +728,14 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         if q:
             ql = q.lower()
             rows = [r for r in rows if ql in json.dumps(r).lower()]
-        return {"items": rows[:limit], "total": len(rows)}
+        page = rows[:limit]
+        if not full:
+            # 16/11 (slow pages): lists show a title and summary only; the review page loads one item in full.
+            # With LedgerSight's details, 360 waiting items were 706 KB; trimmed they are a fraction of that.
+            page = [{**{k: v for k, v in r.items() if k not in ("details", "loaded_details", "attachments")},
+                     "details": {k: (r.get("details") or {}).get(k) for k in ("title", "summary", "link")} if r.get("details") else None,
+                     "attachment_count": len(r.get("attachments") or [])} for r in page]
+        return {"items": page, "total": len(rows)}
 
     @router.get("/v1/decisions/{did}")
     def one(did: str, p=Depends(principal)):
@@ -481,7 +755,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         need(p, APPROVERS, "Only an approver or administrator can assign reviews")
         out = assign(p.tenant_id, did, body.get("to"), identity(p) if identity else p.sub)
         if audit:
-            audit(p, "decision.assign", did)
+            audit(p, "decision.assign", did, {"to": out["assigned_to"], "title": ((db.get(p.tenant_id, did) or {}).get("details") or {}).get("title")})
         return out
 
     @router.post("/v1/decisions/{did}/resolve")
@@ -490,42 +764,193 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         r = db.get(p.tenant_id, did)
         if not r:
             raise _err(404, "not_found", "Decision not found")
-        if r["decision"] != "ESCALATE" or r.get("resolution"):
-            raise _err(409, "not_pending", "This decision is not waiting for a person")
+        return resolve_one(p, r, body.get("outcome"), body.get("reason", ""), body.get("checked_in_app"))
+
+    # Bulk handling (16/11 action items): approve, reject or assign many waiting items at once. Every item gets exactly the
+    # checks of the single endpoints (maker-checker, named approver, details required) and is recorded on its own; one
+    # item failing never stops the others. The answer lists what happened to each item.
+    BULK_MAX = 200
+
+    @router.post("/v1/decisions-bulk")
+    def bulk(body: dict = Body(...), p=Depends(principal)):
+        need(p, APPROVERS, "Only an approver or administrator can act on review items")
+        ids, op = body.get("ids"), body.get("op")
+        if not isinstance(ids, list) or not ids or len(ids) > BULK_MAX or not all(isinstance(x, str) for x in ids):
+            raise _err(422, "invalid_request", f"Choose between 1 and {BULK_MAX} items")
+        if op not in ("approve", "reject", "assign"):
+            raise _err(422, "invalid_request", "op must be approve, reject or assign")
+        if op in ("approve", "reject") and not str(body.get("reason") or "").strip():
+            raise _err(422, "invalid_request", "Give one reason; it is recorded on every item")
         who = identity(p) if identity else p.sub
-        own = who == r["actor"]["id"] or p.sub == r["actor"]["id"] or who == r.get("requested_by")
-        # Approvers can never resolve their own items. Administrators can, and the record says so openly.
-        if own and "customer_admin" not in p.roles:
-            raise _err(403, "maker_checker_violation", "The requester cannot approve their own action")
-        outcome, reason = body.get("outcome"), str(body.get("reason", "")).strip()
-        if outcome not in ("approve", "reject") or not reason:
-            raise _err(422, "invalid_request", "outcome (approve|reject) and a reason are required")
-        d = r.get("details") or {}
-        ld = r.get("loaded_details") or {}
-        has_details = bool(d.get("facts") or d.get("lines") or d.get("compare") or ld.get("facts") or ld.get("lines") or ld.get("compare"))
-        checked = bool(body.get("checked_in_app"))
-        if outcome == "approve" and not has_details and not (checked and d.get("link")):
-            raise _err(409, "details_required", "This item has no details. Check it in the application (link required) or reject it and ask for details")
-        r["resolution"] = {"outcome": outcome, "reason": reason[:2000], "by": who, "at": time.time(),
-                           "basis": "details_in_trustops" if has_details else ("checked_in_application" if checked else "none"),
-                           "self_resolved": own}
+        results = []
+        for did in dict.fromkeys(ids):          # once each, in the order given
+            try:
+                r = db.get(p.tenant_id, did)
+                if not r:
+                    raise _err(404, "not_found", "Decision not found")
+                if op == "assign":
+                    assign(p.tenant_id, did, body.get("to"), who)
+                    if audit:
+                        audit(p, "decision.assign", did, {"to": (str(body.get("to") or "").strip().lower() or None),
+                                                          "title": (r.get("details") or {}).get("title"), "bulk": True})
+                else:
+                    resolve_one(p, r, op, body.get("reason"), body.get("checked_in_app"))
+                results.append({"id": did, "ok": True})
+            except HTTPException as e:
+                d = e.detail if isinstance(e.detail, dict) else {"code": "error", "message": str(e.detail)}
+                results.append({"id": did, "ok": False, "status": e.status_code, **d})
+        done = sum(x["ok"] for x in results)
+        return {"op": op, "done": done, "failed": len(results) - done, "results": results}
+
+    # ---- attachments: an approver uploads a supporting file (receipt, remittance, ...) to an item waiting for them ----
+    # The bytes are checked (type, content, malware scan) by `files` (main.py) and kept in object storage; the record
+    # keeps the file's name, size, SHA-256, who and when. Attachments sit outside the hash (like the resolution), so
+    # adding one never breaks the evidence chain; each upload is in the audit log.
+    @router.post("/v1/decisions/{did}/attachments", status_code=201)
+    async def attach(did: str, request: Request, filename: str = Query(..., min_length=1, max_length=200), p=Depends(principal)):
+        need(p, APPROVERS, "Only an approver or administrator can attach files")
+        if files is None or not files.available():
+            raise _err(501, "not_available", "File uploads are not available in this environment")
+        r = db.get(p.tenant_id, did)
+        if not r:
+            raise _err(404, "not_found", "Decision not found")
+        if r["decision"] != "ESCALATE" or r.get("resolution"):
+            raise _err(409, "not_pending", "Files can be attached only while the item is waiting for a decision")
+        if len(r.get("attachments") or []) >= ATTACH_PER_ITEM:
+            raise _err(409, "too_many", f"An item can have at most {ATTACH_PER_ITEM} files")
+        ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+        if ctype not in ATTACH_TYPES:
+            raise _err(422, "type_not_allowed", "Attach a PDF, image (PNG or JPEG), Word, Excel, CSV, text or JSON file")
+        data = b""
+        async for chunk in request.stream():
+            data += chunk
+            if len(data) > ATTACH_MAX:
+                raise _err(422, "too_large", "Files can be at most 10 MB")
+        if not data:
+            raise _err(422, "empty", "The file is empty")
+        verdict = files.check(ctype, data)
+        if verdict["state"] != "clean":
+            if audit:
+                audit(p, f"decision.attach.{verdict['state']}", did)
+            raise _err(422, "file_rejected", f"The file was not accepted ({verdict.get('reason') or verdict['state']})")
+        fid = "att_" + uuid.uuid4().hex[:16]
+        files.put(p.tenant_id, fid, data)
+        meta = {"id": fid, "filename": _safe_name(filename), "content_type": ctype, "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(), "by": identity(p) if identity else p.sub, "at": time.time()}
+        r["attachments"] = list(r.get("attachments") or []) + [meta]
         db.update(p.tenant_id, r)
-        db.append(p.tenant_id, {"id": "dec_" + uuid.uuid4().hex[:16], "at": time.time(), "tenant_id": p.tenant_id,
-                                "application": r["application"], "actor": {"type": "human", "id": who},
-                                "action": f"resolve_escalation:{outcome}", "resource": did, "client": r.get("client"),
-                                "amount_minor": r.get("amount_minor"), "currency": r.get("currency"), "context": {"reason": reason[:500]},
-                                "decision": "ALLOW", "policy_id": "MAKER-CHECKER",
-                                "reason": (f"Escalation {did} {outcome}d by the administrator who submitted it (self-approval)" if own
-                                           else f"Escalation {did} {outcome}d by a different person"),
-                                "simulated": r.get("simulated", False), "requested_by": who})
         if audit:
-            audit(p, f"decision.resolve.{outcome}", did)
-        return r
+            audit(p, "decision.attach", f"{did}/{fid}")
+        return meta
+
+    @router.get("/v1/decisions/{did}/attachments/{fid}")
+    def attachment(did: str, fid: str, p=Depends(principal)):
+        need(p, READ)
+        r = db.get(p.tenant_id, did)
+        meta = next((a for a in (r or {}).get("attachments") or [] if a["id"] == fid), None)
+        if not meta or files is None:
+            raise _err(404, "not_found", "File not found")
+        data = files.get(p.tenant_id, fid)
+        safe = meta["filename"].encode("ascii", "replace").decode().replace('"', "'")
+        return Response(data, media_type=meta["content_type"], headers={"Content-Disposition": f'attachment; filename="{safe}"',
+                                                                       "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"})
+
+    # ---- TrustTwin (the console's read-only assistant; answers come from the records, see assistant.py) ----
+    @router.get("/v1/assistant/suggestions")
+    def assistant_suggestions(p=Depends(principal)):
+        need(p, READ)
+        from .assistant import SUGGESTIONS
+        return {"suggestions": SUGGESTIONS, "name": "TrustTwin"}
+
+    @router.post("/v1/assistant/ask")
+    def assistant_ask(body: dict = Body(...), p=Depends(principal)):
+        need(p, READ)
+        from .assistant import answer, model_client
+        q = body.get("question")
+        if not isinstance(q, str) or not q.strip():
+            raise _err(422, "invalid_request", "question is required")
+        recs = db.all(p.tenant_id)   # this workspace only: nothing from another workspace can reach the answer or a model
+        out = answer(q, records=recs, rules=db.rules(p.tenant_id), verification=verify_chain(recs),
+                     me={p.sub, identity(p) if identity else p.sub}, roles=p.roles, approvers=APPROVERS, model=model_client())
+        if audit:   # who asked, how it was answered and whether a model was used; the question and answer text are not stored
+            audit(p, "assistant.ask", out["status"], {"written_by": out["written_by"], "model": out["model"]})
+        return out
+
+    # ---- notifications: what happened in the decision log that this person should know about ----
+    # Read from the hash-chained decision records, so every browser sees the same list. Approvers and administrators
+    # are told when an application sends an item for approval or an agent's action is escalated to a person; everyone
+    # is told when someone else approves or rejects an item, and when an agent is blocked. Your own actions never
+    # notify you. Only "seen" is stored (per person, per workspace, on the user record).
+    def notification_items(p):
+        me = {p.sub, identity(p) if identity else p.sub}
+        recs = db.all(p.tenant_id)
+        by_id = {r["id"]: r for r in recs}
+        approver = bool(set(p.roles) & APPROVERS)
+        items = []
+        for r in recs:
+            a = r["action"]
+            if r.get("simulated") or a == "load_review_details":
+                continue
+            # Your own clicks in TrustOps never notify you. An item an application sent and assigned to you does, even
+            # when the same person sent it from that application (one account signed in to both apps). Live issue 2026-11-13.
+            mine_in_app = r["decision"] == "ESCALATE" and not a.startswith("resolve_escalation:") and (r.get("assignment") or {}).get("to") in me
+            if (r["actor"]["id"] in me or r.get("requested_by") in me) and not mine_in_app:
+                continue
+            if a.startswith("resolve_escalation:"):
+                src, kind = by_id.get(r.get("resource")) or {}, ("APPROVED" if a.endswith(":approve") else "REJECTED")
+                note = (r.get("context") or {}).get("reason")
+            elif r["decision"] == "ESCALATE" and approver:
+                kind = ("RESUBMITTED" if (r.get("context") or {}).get("resubmission") else "SUBMITTED") if a == "submit_for_review" else "ESCALATED"
+                src, note = r, (None if kind in ("SUBMITTED", "RESUBMITTED") else r.get("reason"))   # "Submitted for approval" adds nothing
+            elif r["decision"] == "DENY":
+                src, kind, note = r, "DENIED", r.get("reason")
+            else:
+                continue
+            to = (src.get("assignment") or {}).get("to")
+            items.append({"seq": r["sequence"], "kind": kind, "at": r["at"], "by": r["actor"]["id"], "by_type": r["actor"]["type"],
+                          "application": r["application"]["name"], "decision_id": src.get("id") or r.get("resource"),
+                          "title": (src.get("details") or {}).get("title") or str(src.get("action") or a).replace("_", " "),
+                          "action": src.get("action"), "policy_id": src.get("policy_id"), "client": src.get("client"),
+                          "amount_minor": src.get("amount_minor"), "currency": src.get("currency"), "note": (note or "")[:300],
+                          "for_me": bool(to) and to in me, "pending": src.get("decision") == "ESCALATE" and not src.get("resolution")})
+        return items, (recs[-1]["sequence"] if recs else 0)
+
+    def seen_marks(p):
+        users = getattr(db.state, "users", {})
+        return users[p.sub].setdefault("notif_seen", {}) if p.sub in users else {}
+
+    @router.get("/v1/notifications")
+    def notifications(limit: int = Query(30, ge=1, le=100), p=Depends(principal)):
+        need(p, READ)
+        items, _ = notification_items(p)
+        seen = int(seen_marks(p).get(p.tenant_id, 0))
+        for it in items:
+            it["unread"] = it["seq"] > seen
+        return {"unread": sum(it["unread"] for it in items), "items": list(reversed(items))[:limit], "seen": seen,
+                "for": "approver" if set(p.roles) & APPROVERS else "viewer"}
+
+    @router.post("/v1/notifications/seen")
+    def notifications_seen(body: dict = Body(...), p=Depends(principal)):
+        need(p, READ)
+        try:
+            upto = int(body.get("upto"))
+        except (TypeError, ValueError):
+            raise _err(422, "invalid_request", "upto must be a record number") from None
+        _, newest = notification_items(p)
+        marks = seen_marks(p)
+        with db.state.lock:
+            marks[p.tenant_id] = max(int(marks.get(p.tenant_id, 0)), max(0, min(upto, newest)))
+        return {"seen": marks.get(p.tenant_id, 0)}
 
     @router.get("/v1/decisions-stats")
     def get_stats(p=Depends(principal)):
         need(p, READ)
         return stats(db.all(p.tenant_id))
+
+    @router.get("/v1/decisions-insights")
+    def get_insights(p=Depends(principal)):
+        need(p, READ)
+        return insights(db.all(p.tenant_id), db.rules(p.tenant_id))
 
     @router.get("/v1/decisions-verify")
     def verify(p=Depends(principal)):
@@ -533,38 +958,74 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         return {**verify_chain(db.all(p.tenant_id)), "integrity": "sha256_hash_chain",
                 "signed": False, "note": "Records are hash-chained; they are not KMS signed in this environment."}
 
-    @router.get("/v1/decisions-export")
-    def export(fmt: str = Query("json", pattern="^(json|csv|pdf)$"), p=Depends(principal)):
+    # Evidence downloads (2026-11-13 action items): everything, or only what one person / agent did (asked, approved or
+    # rejected), one application, one outcome or a date range. The chain is always verified over ALL records.
+    def _who_did(r):
+        return {r["actor"]["id"]} | ({r["resolution"]["by"]} if r.get("resolution") else set())
+
+    @router.get("/v1/decisions-people")
+    def people(p=Depends(principal)):
         need(p, READ)
-        records = db.all(p.tenant_id)
+        seen = {}
+        for r in db.all(p.tenant_id):
+            if r["action"] == "load_review_details":
+                continue
+            for pid in _who_did(r):
+                kind = "agent" if (r["actor"]["id"] == pid and r["actor"]["type"] == "agent") else "person"
+                e = seen.setdefault(pid, {"id": pid, "kind": kind, "records": 0})
+                e["records"] += 1
+        apps = sorted({r["application"]["name"] for r in db.all(p.tenant_id)})
+        return {"people": sorted(seen.values(), key=lambda e: (e["kind"] != "person", e["id"])), "applications": apps}
+
+    @router.get("/v1/decisions-export")
+    def export(fmt: str = Query("json", pattern="^(json|csv|pdf)$"), person: Optional[str] = Query(None, max_length=200),
+               application: Optional[str] = Query(None, max_length=200), outcome: Optional[str] = Query(None, pattern="^(ALLOW|ESCALATE|DENY|APPROVED|REJECTED|PENDING)$"),
+               since: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"), until: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+               p=Depends(principal)):
+        need(p, READ)
+        everything = db.all(p.tenant_id)
+        import calendar
+        day = lambda d, end=False: calendar.timegm(time.strptime(d, "%Y-%m-%d")) + (86400 if end else 0)   # UTC days
+        final = lambda r: ({"approve": "APPROVED", "reject": "REJECTED"}[r["resolution"]["outcome"]] if r.get("resolution")
+                           else "PENDING" if r["decision"] == "ESCALATE" else r["decision"])
+        records = [r for r in everything
+                   if (not person or person in _who_did(r)) and (not application or r["application"]["name"] == application)
+                   and (not outcome or r["decision"] == outcome or final(r) == outcome)
+                   and (not since or r["at"] >= day(since)) and (not until or r["at"] < day(until, True))]
+        scope = " · ".join(x for x in [f"person or agent: {person}" if person else "", f"application: {application}" if application else "",
+                                       f"outcome: {outcome.lower()}" if outcome else "",
+                                       f"from {since}" if since else "", f"to {until}" if until else ""] if x)
+        scope = f"{scope} · {len(records)} of {len(everything)} records" if scope else None
         if audit:
-            audit(p, "decision.export", fmt)
+            audit(p, "decision.export", f"{fmt}{' filtered' if scope else ''}")
         stamp = time.strftime("%Y%m%d-%H%M%S")
+        tag = "".join(ch if ch.isalnum() else "-" for ch in (person or "")).strip("-")[:40]
+        tag = f"-{tag}" if tag else ("-filtered" if scope else "")
         if fmt == "pdf":
             body = render_pdf(tenant_name(p.tenant_id) if tenant_name else p.tenant_id, identity(p) if identity else p.sub,
-                              records, db.rules(p.tenant_id), verify_chain(records))
+                              records, db.rules(p.tenant_id), verify_chain(everything), scope=scope)
             return Response(body, media_type="application/pdf",
-                            headers={"Content-Disposition": f'attachment; filename="trustops-governance-report-{stamp}.pdf"'})
+                            headers={"Content-Disposition": f'attachment; filename="trustops-governance-report{tag}-{stamp}.pdf"'})
         if fmt == "csv":
             buf = io.StringIO()
             w = csv.writer(buf)
-            w.writerow(["sequence", "decision_id", "time_utc", "application", "actor_type", "actor_id", "action", "client",
+            w.writerow(["sequence", "decision_id", "time (UTC)", "application", "actor_type", "actor_id", "action", "client",
                         "amount_minor", "currency", "decision", "policy_id", "reason", "final", "resolved_by", "simulated", "record_hash"])
             for r in records:
                 res = r.get("resolution") or {}
-                w.writerow([r["sequence"], r["id"], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["at"])), r["application"]["name"],
+                w.writerow([r["sequence"], r["id"], fmt_time(r["at"], seconds=True), r["application"]["name"],
                             r["actor"]["type"], r["actor"]["id"], r["action"], r.get("client") or "", r.get("amount_minor") if r.get("amount_minor") is not None else "",
                             r.get("currency") or "", r["decision"], r["policy_id"], r["reason"],
                             {"approve": "APPROVED", "reject": "REJECTED"}.get(res.get("outcome"), "") or ("PENDING" if r["decision"] == "ESCALATE" else r["decision"]),
                             res.get("by", ""), r.get("simulated", False), r["record_hash"]])
             return Response(buf.getvalue(), media_type="text/csv",
-                            headers={"Content-Disposition": f'attachment; filename="trustops-decisions-{stamp}.csv"'})
+                            headers={"Content-Disposition": f'attachment; filename="trustops-decisions{tag}-{stamp}.csv"'})
         pack = {"format": "trustops.audit-pack.v1", "generated_at": time.time(), "tenant_id": p.tenant_id,
-                "generated_by": identity(p) if identity else p.sub, "verification": verify_chain(records),
+                "generated_by": identity(p) if identity else p.sub, "verification": verify_chain(everything), "filter": scope,
                 "integrity": "sha256_hash_chain (not KMS signed)", "policies": db.rules(p.tenant_id),
                 "summary": stats(records), "records": records}
         return Response(json.dumps(pack, indent=2), media_type="application/json",
-                        headers={"Content-Disposition": f'attachment; filename="trustops-audit-pack-{stamp}.json"'})
+                        headers={"Content-Disposition": f'attachment; filename="trustops-audit-pack{tag}-{stamp}.json"'})
 
     @router.get("/v1/policies")
     def get_rules(p=Depends(principal)):
@@ -592,9 +1053,13 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
                           "actor_types": [a for a in r.get("actor_types", []) if a in ("agent", "human", "service")],
                           "min_amount_minor": None if limit in (None, "") else limit, "decision": r["decision"],
                           "reason": str(r.get("reason", ""))[:200] or r["decision"].title(), "enabled": bool(r.get("enabled", True))})
+        before = {x["id"]: x for x in db.rules(p.tenant_id)}
         db.set_rules(p.tenant_id, clean)
         if audit:
-            audit(p, "policy.update", ",".join(x["id"] for x in clean))
+            after = {x["id"]: x for x in clean}
+            audit(p, "policy.update", ",".join(x["id"] for x in clean),
+                  {"added": [k for k in after if k not in before], "removed": [k for k in before if k not in after],
+                   "changed": [k for k in after if k in before and before[k] != after[k]]})
         return {"rules": clean}
 
     @router.post("/v1/policies/reset")
@@ -602,7 +1067,7 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
         need(p, ADMIN, "Only a workspace administrator can change policies")
         db.set_rules(p.tenant_id, [dict(x) for x in DEFAULT_RULES])
         if audit:
-            audit(p, "policy.reset", p.tenant_id)
+            audit(p, "policy.reset", p.tenant_id, {})
         return {"rules": db.rules(p.tenant_id)}
 
 
@@ -646,8 +1111,11 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             people.append({"user": u.get("email") or sub, "roles": [ROLE_CAPS.get(r, (r,))[0] for r in roles], "can": caps,
                            "client_scope": "All clients"})
         history = [e for e in getattr(db.state, "audit", []) if e.get("tenant_id") == p.tenant_id and
-                   str(e.get("action", "")).startswith(("policy.", "authority.", "integration.", "decision.resolve"))][-100:]
-        return {"agents": sorted(db.agents(p.tenant_id), key=lambda a: -(a.get("last_seen") or a["first_seen"])),
+                   str(e.get("action", "")).startswith(("policy.", "authority.", "integration.", "decision.resolve", "decision.assign"))][-100:]
+        emails = {sub: (u.get("email") or sub) for sub, u in users.items()}
+        history = [{**e, "who": emails.get(e.get("sub"), e.get("sub")), "text": describe_change(e)} for e in history]
+        agents = [a for a in db.agents(p.tenant_id) if a.get("actor_type") != "human"]   # people registered before 16/11 are not agents
+        return {"agents": sorted(agents, key=lambda a: -(a.get("last_seen") or a["first_seen"])),
                 "people": sorted(people, key=lambda x: x["user"]),
                 "matrix": {"actor_types": ["agent", "human", "service"], "actions": actions,
                            "cells": {f"{t}|{a}": cell(t, a) for t in ("agent", "human", "service") for a in actions}},
@@ -686,7 +1154,10 @@ def make_router(principal, find_integration_by_key, audit=None, identity=None, s
             changes.append("client_scope")
         db.save_agent(a)
         if audit and changes:
-            audit(p, "authority.agent." + "+".join(changes), f'{a["actor_id"]}@{a["application"]["name"]}')
+            audit(p, "authority.agent." + "+".join(changes), f'{a["actor_id"]}@{a["application"]["name"]}',
+                  {"agent": a["actor_id"], "application": a["application"]["name"], "status": a["status"],
+                   "reason": (a.get("status_changed") or {}).get("reason") if "status" in body else None,
+                   "owner": a.get("owner"), "allowed_clients": a.get("allowed_clients")})
         return a
 
 

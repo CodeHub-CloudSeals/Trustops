@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from typing import Any, Optional
 
@@ -155,9 +156,13 @@ def load(store: Store, target: Optional[str | URL] = None) -> bool:
     return True
 
 
+_SAVE_LOCK = threading.RLock()   # one snapshot write at a time (the middleware now saves from worker threads)
+
+
 def save(store: Store, target: Optional[str | URL] = None) -> None:
     try:
-        _save(store, target)
+        with _SAVE_LOCK:
+            _save(store, target)
     except PersistConflict:
         raise
     except Exception as exc:

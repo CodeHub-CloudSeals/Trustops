@@ -8,7 +8,27 @@ import hashlib
 import io
 import json
 import re
+from pathlib import Path
 from typing import Any
+
+LOGO_PNG = Path(__file__).resolve().parent / "assets" / "cloudseals-logo.png"   # CloudSeals logo (same file LedgerSight's reports use)
+
+
+def logo_header(title_flowables: list, logo_mm: float = 16, width_mm: float | None = None) -> list:
+    """ReportLab flowables: the CloudSeals logo to the left of the title block. Falls back to the title alone if the
+    logo file or image support is missing; a missing logo must never stop a report."""
+    try:
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Image, Table, TableStyle
+        if not LOGO_PNG.is_file():
+            return title_flowables
+        img = Image(str(LOGO_PNG), width=logo_mm * mm, height=logo_mm * mm, mask="auto")
+        t = Table([[img, title_flowables]], colWidths=[(logo_mm + 5) * mm, (width_mm - logo_mm - 5) * mm if width_mm else None], hAlign="LEFT")
+        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                               ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+        return [t]
+    except Exception:
+        return title_flowables
 
 SEV = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 PRELIMINARY_BANNER = "PRELIMINARY - NOT REVIEWED BY CLOUDSEALS. Do not rely on this document."
@@ -120,6 +140,12 @@ def render_docx(model: dict) -> bytes:
     from docx.shared import Pt, RGBColor
     d = Document()
     d.core_properties.title = model["title"]
+    try:                                    # CloudSeals logo above the title; never stops a report
+        from docx.shared import Mm
+        if LOGO_PNG.is_file():
+            d.add_picture(str(LOGO_PNG), width=Mm(16))
+    except Exception:
+        pass
     d.add_heading(clean(model["title"]), 0)
     if model["banner"]:
         p = d.add_paragraph()
@@ -155,7 +181,12 @@ def render_pdf(model: dict) -> bytes:
     ss = getSampleStyleSheet()
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, title=model["title"], author="CloudSeals TrustOps")
-    st: list = [Paragraph(esc(clean(model["title"])), ss["Title"])]
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    title = ParagraphStyle("t", parent=ss["Title"], alignment=0, spaceAfter=0)
+    st: list = logo_header([Paragraph(esc(clean(model["title"])), title),
+                            Paragraph("CloudSeals TrustOps", ss["Normal"])], width_mm=(A4[0] - 2 * doc.leftMargin) / mm)
+    st.append(Spacer(1, 10))
     if model["banner"]:
         st.append(Paragraph(f"<font color='#C00000'><b>{esc(model['banner'])}</b></font>", ss["Normal"]))
     st += [Paragraph(esc(f"Status: {model['status']} | Assessment {model['assessment_id']}"), ss["Normal"]),
